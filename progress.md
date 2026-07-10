@@ -2,6 +2,17 @@
 
 A running history of changes to JellyPrivateLibraries.
 
+## 2026-07-10 — v1.0.0.3: fix authorization policy (500s)
+
+- Every authenticated endpoint returned HTTP 500:
+  `The AuthorizationPolicy named: 'DefaultAuthorization' was not found`. That policy
+  was removed in Jellyfin 10.11 (policies moved to `MediaBrowser.Common/Api/Policies.cs`).
+  Replaced `[Authorize(Policy = "DefaultAuthorization")]` with bare `[Authorize]` on all
+  widget endpoints (matches how Jellyfin 10.11's own controllers authorize).
+- This was the real cause of the widget doing nothing; the v1.0.0.2 `ApiClient.ajax`
+  switch and error surfacing stay (they made this error visible).
+- Bumped `1.0.0.2` → `1.0.0.3`.
+
 ## 2026-07-10 — v1.0.0.2: fix widget API auth + UX
 
 - Widget actions (restriction toggle, add/remove title, search) all silently

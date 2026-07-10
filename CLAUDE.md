@@ -30,6 +30,8 @@ on Jellyfin's native per-user **allowed-tags whitelist** (`UserPolicy.AllowedTag
   Item lookup by provider id uses `InternalItemsQuery.HasAnyProviderId`.
 - `Api/RestrictionController.cs` — widget REST API (identity resolved via
   `IAuthorizationContext.GetAuthorizationInfo(Request)`) + `/PrivateLibraries/Webhook`.
+  Authenticated endpoints use bare `[Authorize]` — the old `DefaultAuthorization`
+  policy was removed in 10.11 and naming it throws "policy not found" (500).
 - `Services/ScriptInjector.cs` — patches `index.html` (Intro-Skipper pattern).
 - `Web/private-libraries.js` — injected widget (vanilla JS, no build step).
 - `ScheduledTasks/ReconcileTask.cs` — startup + 30-min interval reconcile.

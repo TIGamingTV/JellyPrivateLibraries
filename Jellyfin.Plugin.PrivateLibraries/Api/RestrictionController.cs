@@ -78,7 +78,7 @@ public class RestrictionController : ControllerBase
     /// </summary>
     /// <returns>The status.</returns>
     [HttpGet("Me")]
-    [Authorize(Policy = "DefaultAuthorization")]
+    [Authorize]
     public async Task<ActionResult<MeStatusDto>> GetMe()
     {
         var userId = await GetUserIdAsync().ConfigureAwait(false);
@@ -100,7 +100,7 @@ public class RestrictionController : ControllerBase
     /// <param name="body">The request body.</param>
     /// <returns>No content.</returns>
     [HttpPost("Me/Restriction")]
-    [Authorize(Policy = "DefaultAuthorization")]
+    [Authorize]
     public async Task<ActionResult> SetRestriction([FromBody] SetRestrictionDto body)
     {
         var userId = await GetUserIdAsync().ConfigureAwait(false);
@@ -127,7 +127,7 @@ public class RestrictionController : ControllerBase
     /// </summary>
     /// <returns>The granted items.</returns>
     [HttpGet("Me/Grants")]
-    [Authorize(Policy = "DefaultAuthorization")]
+    [Authorize]
     public async Task<ActionResult<IEnumerable<ItemDto>>> GetGrants()
     {
         var userId = await GetUserIdAsync().ConfigureAwait(false);
@@ -145,7 +145,7 @@ public class RestrictionController : ControllerBase
     /// <param name="body">The request body.</param>
     /// <returns>No content.</returns>
     [HttpPost("Me/Grants")]
-    [Authorize(Policy = "DefaultAuthorization")]
+    [Authorize]
     public async Task<ActionResult> AddGrant([FromBody] GrantItemDto body)
     {
         var userId = await GetUserIdAsync().ConfigureAwait(false);
@@ -178,7 +178,7 @@ public class RestrictionController : ControllerBase
     /// <param name="itemId">The item id.</param>
     /// <returns>No content.</returns>
     [HttpDelete("Me/Grants/{itemId}")]
-    [Authorize(Policy = "DefaultAuthorization")]
+    [Authorize]
     public async Task<ActionResult> RemoveGrant([FromRoute] string itemId)
     {
         var userId = await GetUserIdAsync().ConfigureAwait(false);
@@ -211,7 +211,7 @@ public class RestrictionController : ControllerBase
     /// <param name="query">The search term.</param>
     /// <returns>Matching items.</returns>
     [HttpGet("Search")]
-    [Authorize(Policy = "DefaultAuthorization")]
+    [Authorize]
     public async Task<ActionResult<IEnumerable<ItemDto>>> Search([FromQuery] string? query)
     {
         var userId = await GetUserIdAsync().ConfigureAwait(false);
