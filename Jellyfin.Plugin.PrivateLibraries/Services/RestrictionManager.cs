@@ -388,27 +388,47 @@ public class RestrictionManager
     /// <returns>A task.</returns>
     public async Task ReconcileAllAsync(IProgress<double>? progress, CancellationToken cancellationToken)
     {
-        // 1. Ensure entries + policies for all users.
         var users = _userManager.GetUsers().ToList();
+
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            foreach (var user in users)
+            // One-time migration to the opt-in model: clear every existing restriction so
+            // no user is restricted unless they turn it on themselves.
+            if (Config.SchemaVersion < 1)
             {
-                EnsureUserEntryLocked(user.Id);
+                foreach (var entry in Config.Users)
+                {
+                    entry.RestrictionEnabled = false;
+                }
+
+                Config.SchemaVersion = 1;
+                Plugin.Instance!.SaveConfiguration();
             }
 
-            Plugin.Instance!.SaveConfiguration();
+            // Mandatory mode only: auto-enroll every user so they are restricted by default.
+            if (Config.RestrictNewUsersByDefault)
+            {
+                foreach (var user in users)
+                {
+                    EnsureUserEntryLocked(user.Id);
+                }
+
+                Plugin.Instance!.SaveConfiguration();
+            }
         }
         finally
         {
             _lock.Release();
         }
 
-        foreach (var user in users)
+        // Only touch the policies of users the plugin actually manages (opted in / has an
+        // entry). Users who never engaged the plugin are left completely untouched.
+        var managedUserIds = Config.Users.Select(u => u.UserId).ToList();
+        foreach (var userId in managedUserIds)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await SyncUserPolicyAsync(user.Id).ConfigureAwait(false);
+            await SyncUserPolicyAsync(userId).ConfigureAwait(false);
         }
 
         progress?.Report(25);

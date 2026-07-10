@@ -1,7 +1,7 @@
 ---
 name: "Private Libraries"
 guid: "a3f1c6d2-9b4e-4c8a-bf2d-7e5a1c9d40e1"
-version: "1.0.0.3"
+version: "1.0.0.4"
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 overview: "Restrict each user to only their requested or granted media."

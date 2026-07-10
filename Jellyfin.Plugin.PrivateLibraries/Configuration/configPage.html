@@ -12,8 +12,9 @@
                 <div class="verticalSection">
                     <h2 class="sectionTitle">Private Libraries</h2>
                     <p class="fieldDescription">
-                        Every user is restricted to the media they requested through Jellyseerr or added from the
-                        home-screen widget. Users can turn their own restriction off from that widget.
+                        The plugin is opt-in: each user can turn on "Restrict my library" from the home-screen
+                        widget, after which they only see the media they requested through Jellyseerr or added
+                        from that widget. Users who never enable it keep seeing the full library.
                     </p>
                 </div>
 
@@ -26,10 +27,12 @@
                 <div class="checkboxContainer checkboxContainer-withDescription">
                     <label class="emby-checkbox-label">
                         <input is="emby-checkbox" type="checkbox" id="RestrictNewUsersByDefault" name="RestrictNewUsersByDefault" />
-                        <span>Restrict new users by default</span>
+                        <span>Mandatory mode: restrict every user automatically</span>
                     </label>
                     <div class="fieldDescription checkboxFieldDescription">
-                        New users start restricted (they see nothing until granted something).
+                        Off (default): the plugin is opt-in — each user is only restricted once they
+                        enable it from the widget. On: every user is restricted automatically and
+                        starts seeing nothing until granted something.
                     </div>
                 </div>
 
@@ -93,7 +96,7 @@
                 Dashboard.showLoadingMsg();
                 ApiClient.getPluginConfiguration(PrivateLibrariesConfig.pluginUniqueId).then(function (config) {
                     document.querySelector('#TagPrefix').value = config.TagPrefix || 'jpl';
-                    document.querySelector('#RestrictNewUsersByDefault').checked = config.RestrictNewUsersByDefault !== false;
+                    document.querySelector('#RestrictNewUsersByDefault').checked = config.RestrictNewUsersByDefault === true;
                     document.querySelector('#JellyseerrUrl').value = config.JellyseerrUrl || '';
                     document.querySelector('#JellyseerrWebhookSecret').value = config.JellyseerrWebhookSecret || '';
                     try {

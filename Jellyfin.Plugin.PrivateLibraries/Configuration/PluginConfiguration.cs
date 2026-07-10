@@ -23,10 +23,16 @@ public class PluginConfiguration : BasePluginConfiguration
     public string JellyseerrWebhookSecret { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets a value indicating whether users are restricted by default
-    /// (each user starts seeing only their granted/requested media).
+    /// Gets or sets a value indicating whether every user is restricted automatically
+    /// (mandatory mode). When false (default) the plugin is opt-in: a user is only
+    /// restricted once they enable it from the widget.
     /// </summary>
-    public bool RestrictNewUsersByDefault { get; set; } = true;
+    public bool RestrictNewUsersByDefault { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the configuration schema version, used to run one-time migrations.
+    /// </summary>
+    public int SchemaVersion { get; set; }
 
     /// <summary>
     /// Gets or sets the prefix used to build each user's personal tag (e.g. "jpl").
