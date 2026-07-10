@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Private Libraries</title>
+</head>
+<body>
+<div id="privateLibrariesConfigPage" data-role="page" class="page type-interior pluginConfigurationPage"
+     data-require="emby-input,emby-button,emby-checkbox">
+    <div data-role="content">
+        <div class="content-primary">
+            <form id="privateLibrariesConfigForm" style="margin:auto;">
+                <div class="verticalSection">
+                    <h2 class="sectionTitle">Private Libraries</h2>
+                    <p class="fieldDescription">
+                        Every user is restricted to the media they requested through Jellyseerr or added from the
+                        home-screen widget. Users can turn their own restriction off from that widget.
+                    </p>
+                </div>
+
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="TagPrefix">Personal tag prefix</label>
+                    <input is="emby-input" type="text" id="TagPrefix" name="TagPrefix" />
+                    <div class="fieldDescription">Prefix for the per-user tag written onto granted items (e.g. <code>jpl</code>).</div>
+                </div>
+
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label class="emby-checkbox-label">
+                        <input is="emby-checkbox" type="checkbox" id="RestrictNewUsersByDefault" name="RestrictNewUsersByDefault" />
+                        <span>Restrict new users by default</span>
+                    </label>
+                    <div class="fieldDescription checkboxFieldDescription">
+                        New users start restricted (they see nothing until granted something).
+                    </div>
+                </div>
+
+                <div class="verticalSection">
+                    <h2 class="sectionTitle">Jellyseerr</h2>
+                </div>
+
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="JellyseerrUrl">Jellyseerr URL</label>
+                    <input is="emby-input" type="text" id="JellyseerrUrl" name="JellyseerrUrl" placeholder="http://jellyseerr:5055" />
+                    <div class="fieldDescription">Informational only.</div>
+                </div>
+
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="JellyseerrWebhookSecret">Webhook shared secret</label>
+                    <input is="emby-input" type="text" id="JellyseerrWebhookSecret" name="JellyseerrWebhookSecret" />
+                    <div class="fieldDescription">
+                        Paste this same value into the Jellyseerr webhook payload's <code>secret</code> field.
+                        Leave empty to disable webhook processing.
+                    </div>
+                </div>
+
+                <div class="verticalSection">
+                    <h3 class="sectionTitle">Jellyseerr webhook setup</h3>
+                    <p class="fieldDescription">
+                        In Jellyseerr → Settings → Notifications → Webhook, set the Webhook URL to
+                        <code id="webhookUrlHint">&lt;server&gt;/PrivateLibraries/Webhook</code>
+                        and use this JSON payload template:
+                    </p>
+<pre style="white-space:pre-wrap;background:#181d22;color:#ddd;padding:12px;border-radius:6px;">{
+  "notification_type": "{{notification_type}}",
+  "secret": "&lt;your secret&gt;",
+  "media": {
+    "media_type": "{{media_type}}",
+    "tmdbId": "{{media_tmdbid}}",
+    "tvdbId": "{{media_tvdbid}}"
+  },
+  "request": {
+    "username": "{{requestedBy_username}}",
+    "email": "{{requestedBy_email}}"
+  }
+}</pre>
+                </div>
+
+                <div>
+                    <button is="emby-button" type="submit" class="raised button-submit block">
+                        <span>Save</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        var PrivateLibrariesConfig = {
+            pluginUniqueId: 'a3f1c6d2-9b4e-4c8a-bf2d-7e5a1c9d40e1'
+        };
+
+        document.querySelector('#privateLibrariesConfigPage')
+            .addEventListener('pageshow', function () {
+                Dashboard.showLoadingMsg();
+                ApiClient.getPluginConfiguration(PrivateLibrariesConfig.pluginUniqueId).then(function (config) {
+                    document.querySelector('#TagPrefix').value = config.TagPrefix || 'jpl';
+                    document.querySelector('#RestrictNewUsersByDefault').checked = config.RestrictNewUsersByDefault !== false;
+                    document.querySelector('#JellyseerrUrl').value = config.JellyseerrUrl || '';
+                    document.querySelector('#JellyseerrWebhookSecret').value = config.JellyseerrWebhookSecret || '';
+                    try {
+                        var base = ApiClient.serverAddress();
+                        document.querySelector('#webhookUrlHint').textContent = base.replace(/\/$/, '') + '/PrivateLibraries/Webhook';
+                    } catch (e) { /* ignore */ }
+                    Dashboard.hideLoadingMsg();
+                });
+            });
+
+        document.querySelector('#privateLibrariesConfigForm')
+            .addEventListener('submit', function (e) {
+                e.preventDefault();
+                Dashboard.showLoadingMsg();
+                ApiClient.getPluginConfiguration(PrivateLibrariesConfig.pluginUniqueId).then(function (config) {
+                    config.TagPrefix = document.querySelector('#TagPrefix').value || 'jpl';
+                    config.RestrictNewUsersByDefault = document.querySelector('#RestrictNewUsersByDefault').checked;
+                    config.JellyseerrUrl = document.querySelector('#JellyseerrUrl').value;
+                    config.JellyseerrWebhookSecret = document.querySelector('#JellyseerrWebhookSecret').value;
+                    ApiClient.updatePluginConfiguration(PrivateLibrariesConfig.pluginUniqueId, config).then(function (result) {
+                        Dashboard.processPluginConfigurationUpdateResult(result);
+                    });
+                });
+                return false;
+            });
+    </script>
+</div>
+</body>
+</html>

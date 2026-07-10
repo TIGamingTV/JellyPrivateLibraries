@@ -1,0 +1,21 @@
+[
+    {
+        "guid": "a3f1c6d2-9b4e-4c8a-bf2d-7e5a1c9d40e1",
+        "name": "Private Libraries",
+        "description": "Restricts which media each user sees. Titles appear when requested through Jellyseerr or added from a home-screen widget, using Jellyfin's per-user allowed-tags whitelist.",
+        "overview": "Per-user media restriction via Jellyseerr requests and a home-screen widget.",
+        "owner": "TIGamingTV",
+        "category": "General",
+        "imageUrl": "",
+        "versions": [
+            {
+                "version": "1.0.0.0",
+                "changelog": "Initial release: per-user allowed-tags whitelist, Jellyseerr webhook grants, home-screen selection widget, reconcile scheduled task.",
+                "targetAbi": "10.11.0.0",
+                "sourceUrl": "",
+                "checksum": "",
+                "timestamp": "2026-07-10T00:00:00Z"
+            }
+        ]
+    }
+]
