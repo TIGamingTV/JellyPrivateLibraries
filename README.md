@@ -7,7 +7,7 @@ A title becomes visible to a user in one of two ways:
 1. **They requested it through Jellyseerr** — the plugin receives a Jellyseerr webhook and auto-grants the requester access when the media lands in the library.
 2. **They added it from the home-screen widget** — a button injected into the web UI opens a dialog where the user searches the library and picks titles to make visible.
 
-Every user is restricted by default (admins included), but **any user can turn their own restriction off** from the widget (they then see the whole library again).
+The plugin is **opt-in**: by default no one is restricted and everyone sees the full library. A user turns on **"Restrict my library"** in the widget when they want it, and can turn it back off anytime. (Admins can enable a *mandatory mode* in the plugin config to restrict every user automatically.)
 
 ## How it works
 
@@ -95,7 +95,7 @@ Enable the **Request Approved**, **Request Automatically Approved**, and **Media
 
 ## Caveats
 
-- **Empty library for new users:** because the whitelist hides everything untagged, a freshly restricted user sees nothing until they're granted a title or one is requested for them.
+- **Empty library once restricted:** because the whitelist hides everything untagged, a user who turns restriction on sees nothing until they're granted a title or one is requested for them. (By default users are unrestricted, so this only applies after they opt in — or if the admin enables mandatory mode.)
 - **Script injection edits `index.html`** in the Jellyfin web root. The server process needs write access to that directory; if it doesn't, the restriction still works but the widget button won't appear. Some setups reset the web root on update — re-injection happens automatically on each startup.
 - **Requester matching** relies on the Jellyseerr username matching the Jellyfin username. Unmatched requests are logged and skipped.
 - The widget is injected JavaScript against Jellyfin's web internals and may need touch-ups across major web-UI versions.

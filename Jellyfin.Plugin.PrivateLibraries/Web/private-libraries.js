@@ -119,7 +119,7 @@
         dialog.appendChild(close);
 
         dialog.appendChild(el('h2', null, 'My Private Library'));
-        dialog.appendChild(el('div', 'pl-muted', 'Choose which titles appear in your libraries. Turn the restriction off to see everything.'));
+        dialog.appendChild(el('div', 'pl-muted', 'Off (default): you see your whole library. Turn it on to limit yourself to only the titles you select or request.'));
 
         var errorBox = el('div', 'pl-error');
         dialog.appendChild(errorBox);

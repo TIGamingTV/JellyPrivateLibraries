@@ -2,6 +2,19 @@
 
 A running history of changes to JellyPrivateLibraries.
 
+## 2026-07-10 — v1.0.0.4: make restriction opt-in (not mandatory)
+
+- The plugin restricted every user by default, so libraries started hidden and the
+  widget toggle opened as "restricted" — confusing and mandatory. Switched to opt-in.
+- `PluginConfiguration.RestrictNewUsersByDefault` default → `false`; added `SchemaVersion`.
+- `RestrictionManager.ReconcileAllAsync`: one-time migration (SchemaVersion < 1) resets all
+  existing entries to unrestricted; auto-enroll-all now only runs in mandatory mode; policy
+  sync only touches users the plugin manages (opted in), leaving everyone else untouched.
+- Config page: the checkbox is now "Mandatory mode" (off by default), intro text clarified.
+- Widget copy clarifies off = full library, on = restricted.
+- Verified working per user report: switch, button, manual add. Seerr still untested.
+- Bumped `1.0.0.3` → `1.0.0.4`.
+
 ## 2026-07-10 — v1.0.0.3: fix authorization policy (500s)
 
 - Every authenticated endpoint returned HTTP 500:
