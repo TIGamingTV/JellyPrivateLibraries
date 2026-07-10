@@ -2,6 +2,19 @@
 
 A running history of changes to JellyPrivateLibraries.
 
+## 2026-07-10 — v1.0.0.2: fix widget API auth + UX
+
+- Widget actions (restriction toggle, add/remove title, search) all silently
+  no-op'd: `Web/private-libraries.js` used raw `fetch` with a legacy `X-Emby-Token`
+  header, which Jellyfin 10.11 rejects, and swallowed all errors. Rewrote the API
+  helpers to use `ApiClient.ajax(...)` (correct `Authorization: MediaBrowser` header),
+  surface errors inline + in the console, and reload the page on dialog close when a
+  change was made so toggling/granting is reflected in the library.
+- `Api/RestrictionController.cs`: write endpoints now return `Ok(...)` JSON instead of
+  204 (so `ApiClient.ajax` doesn't choke) and wrap operations in try/catch with logging.
+- Bumped version `1.0.0.1` → `1.0.0.2`.
+- Existing-media handling: manual widget only (no Jellyseerr API backfill).
+
 ## 2026-07-10 — v1.0.0.1: fix widget script path
 
 - The injected `<script>` used a relative `src="PrivateLibraries/ClientScript"`, which

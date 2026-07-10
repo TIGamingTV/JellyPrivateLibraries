@@ -109,8 +109,17 @@ public class RestrictionController : ControllerBase
             return Unauthorized();
         }
 
-        await _restrictionManager.SetRestrictionEnabledAsync(userId, body.Enabled).ConfigureAwait(false);
-        return NoContent();
+        try
+        {
+            await _restrictionManager.SetRestrictionEnabledAsync(userId, body.Enabled).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to set restriction for user {UserId}", userId);
+            return StatusCode(500, new { error = ex.Message });
+        }
+
+        return Ok(new { ok = true, enabled = body.Enabled });
     }
 
     /// <summary>
@@ -150,8 +159,17 @@ public class RestrictionController : ControllerBase
             return BadRequest("Unknown item id.");
         }
 
-        await _restrictionManager.AddManualGrantAsync(userId, itemId, CancellationToken.None).ConfigureAwait(false);
-        return NoContent();
+        try
+        {
+            await _restrictionManager.AddManualGrantAsync(userId, itemId, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to add grant {ItemId} for user {UserId}", itemId, userId);
+            return StatusCode(500, new { error = ex.Message });
+        }
+
+        return Ok(new { ok = true });
     }
 
     /// <summary>
@@ -174,8 +192,17 @@ public class RestrictionController : ControllerBase
             return BadRequest("Invalid item id.");
         }
 
-        await _restrictionManager.RemoveGrantAsync(userId, parsed, CancellationToken.None).ConfigureAwait(false);
-        return NoContent();
+        try
+        {
+            await _restrictionManager.RemoveGrantAsync(userId, parsed, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to remove grant {ItemId} for user {UserId}", parsed, userId);
+            return StatusCode(500, new { error = ex.Message });
+        }
+
+        return Ok(new { ok = true });
     }
 
     /// <summary>
