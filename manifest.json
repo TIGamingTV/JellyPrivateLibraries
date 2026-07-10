@@ -10,11 +10,11 @@
         "versions": [
             {
                 "version": "1.0.0.0",
-                "changelog": "Initial release: per-user allowed-tags whitelist, Jellyseerr webhook grants, home-screen selection widget, reconcile scheduled task.",
+                "changelog": "Release 1.0.0.0",
                 "targetAbi": "10.11.0.0",
-                "sourceUrl": "",
-                "checksum": "",
-                "timestamp": "2026-07-10T00:00:00Z"
+                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.0.0.0/private-libraries_1.0.0.0.zip",
+                "checksum": "b7dee5a37e4ec67f5dbfc88617dd19d3",
+                "timestamp": "2026-07-10T22:28:38Z"
             }
         ]
     }
