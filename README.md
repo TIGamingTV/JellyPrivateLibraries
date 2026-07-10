@@ -47,10 +47,25 @@ The output `Jellyfin.Plugin.PrivateLibraries.dll` (in `bin/Release/net9.0/`) is 
 
 ## Installing
 
+### Option A — via plugin repository URL (recommended)
+
+1. In Jellyfin: **Dashboard → Plugins → Repositories → +** and add this URL:
+
+   ```
+   https://raw.githubusercontent.com/TIGamingTV/JellyPrivateLibraries/main/manifest.json
+   ```
+
+2. Go to **Catalog**, find **Private Libraries** under *General*, and install it.
+3. Restart Jellyfin when prompted.
+4. Open **Dashboard → Plugins → Private Libraries** to configure.
+5. Refresh the web UI in your browser — the widget button (a video-library icon) appears in the top header.
+
+Releases are produced by `.github/workflows/release.yml` (triggered by pushing a `v*` tag or running the workflow manually); it builds the DLL, publishes a GitHub Release zip, and updates `manifest.json` on `main` with the download URL and MD5 checksum.
+
+### Option B — manual
+
 1. Copy `Jellyfin.Plugin.PrivateLibraries.dll` into a folder named `Private Libraries` under your Jellyfin `plugins/` directory (e.g. `/config/plugins/Private Libraries/`).
-2. Restart Jellyfin.
-3. Open **Dashboard → Plugins → Private Libraries** to configure.
-4. Refresh the web UI in your browser — the widget button (a video-library icon) appears in the top header.
+2. Restart Jellyfin, then configure as above.
 
 ## Jellyseerr webhook setup
 
