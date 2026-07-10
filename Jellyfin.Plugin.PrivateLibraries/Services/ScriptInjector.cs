@@ -65,7 +65,7 @@ public class ScriptInjector : IHostedService
 
         var html = File.ReadAllText(indexPath);
         var snippet = StartMarker
-                      + "<script defer src=\"PrivateLibraries/ClientScript\"></script>"
+                      + "<script defer src=\"../PrivateLibraries/ClientScript\"></script>"
                       + EndMarker;
 
         // Remove any stale injected block first (keeps it idempotent across versions).

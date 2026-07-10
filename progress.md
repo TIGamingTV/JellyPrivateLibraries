@@ -2,6 +2,14 @@
 
 A running history of changes to JellyPrivateLibraries.
 
+## 2026-07-10 — v1.0.0.1: fix widget script path
+
+- The injected `<script>` used a relative `src="PrivateLibraries/ClientScript"`, which
+  resolved to `<base>/web/PrivateLibraries/ClientScript` (404, empty MIME → "Refused to
+  execute") because the controller lives at `<base>/PrivateLibraries/ClientScript`.
+  Changed the src to `../PrivateLibraries/ClientScript` in `Services/ScriptInjector.cs`.
+- Bumped version `1.0.0.0` → `1.0.0.1` (csproj + `build.yaml`).
+
 ## 2026-07-10 — Initial implementation
 
 Built the plugin from scratch (repo previously held only README + LICENSE).
