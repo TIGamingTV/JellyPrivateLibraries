@@ -30,10 +30,19 @@ Built the plugin from scratch (repo previously held only README + LICENSE).
   toggle, Jellyseerr URL/secret, and webhook setup instructions.
 - Rewrote `README.md`; added `CLAUDE.md`.
 
+**Build fixes (same day)**
+
+- Retargeted `net8.0` → `net9.0` (Jellyfin.Controller 10.11 supports net9.0 only;
+  net8.0 restore failed with NU1202).
+- Removed a stale `using Jellyfin.Data.Entities;` — the `User` entity moved out of
+  that namespace in 10.11 (CS0234).
+- **CI is green:** the plugin compiles against Jellyfin 10.11 / .NET 9 and the
+  `Jellyfin.Plugin.PrivateLibraries.dll` artifact is produced.
+
 **Notes / not yet done**
 
-- Not compiled in this environment (the .NET SDK host was blocked by egress
-  policy); CI (`build.yml`) is the first compile checkpoint.
+- Not run inside a live Jellyfin server yet (no runtime env here); verified by a
+  clean CI compile. End-to-end verification steps are in the README.
 - No automated tests yet.
 - Series grants tag the series item; episode visibility relies on Jellyfin's
   inherited-tag parental filtering.
