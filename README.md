@@ -35,13 +35,13 @@ The plugin configuration is the **source of truth** for who is restricted and wh
 
 ## Building
 
-Requires the .NET 8 SDK.
+Requires the .NET 9 SDK (Jellyfin 10.11 targets .NET 9).
 
 ```bash
 dotnet build Jellyfin.Plugin.PrivateLibraries/Jellyfin.Plugin.PrivateLibraries.csproj -c Release
 ```
 
-The output `Jellyfin.Plugin.PrivateLibraries.dll` (in `bin/Release/net8.0/`) is the plugin. GitHub Actions (`.github/workflows/build.yml`) also builds it on every push.
+The output `Jellyfin.Plugin.PrivateLibraries.dll` (in `bin/Release/net9.0/`) is the plugin. GitHub Actions (`.github/workflows/build.yml`) also builds it on every push.
 
 > The project targets `Jellyfin.Controller` `10.11.*`. Match this to your server version if you run something different (the allowed-tags whitelist requires Jellyfin **10.9+**).
 

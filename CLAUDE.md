@@ -4,7 +4,7 @@ Guidance for working in this repository.
 
 ## What this is
 
-A **Jellyfin server plugin** (C# / .NET 8) that restricts each user to only the
+A **Jellyfin server plugin** (C# / .NET 9) that restricts each user to only the
 media they requested via Jellyseerr or added from a home-screen widget. It is built
 on Jellyfin's native per-user **allowed-tags whitelist** (`UserPolicy.AllowedTags`).
 

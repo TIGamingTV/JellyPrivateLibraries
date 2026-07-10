@@ -8,7 +8,7 @@ Built the plugin from scratch (repo previously held only README + LICENSE).
 
 **Added**
 
-- Plugin scaffold targeting Jellyfin `10.11.*` / net8.0: `Plugin.cs`,
+- Plugin scaffold targeting Jellyfin `10.11.*` / net9.0: `Plugin.cs`,
   `PluginConfiguration.cs`, `PluginServiceRegistrator.cs`, `.csproj`,
   `build.yaml`, `manifest.json`, `.github/workflows/build.yml`, `.gitignore`.
 - `Services/RestrictionManager.cs` — core service: per-user personal tags,
