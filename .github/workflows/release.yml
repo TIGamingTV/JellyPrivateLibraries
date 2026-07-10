@@ -1,0 +1,107 @@
+name: Release Plugin
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Plugin version (e.g. 1.0.0.0)"
+        required: true
+        default: "1.0.0.0"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Determine version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            V="${GITHUB_REF_NAME#v}"
+          else
+            V="${{ github.event.inputs.version }}"
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "tag=v$V" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: dotnet build Jellyfin.Plugin.PrivateLibraries/Jellyfin.Plugin.PrivateLibraries.csproj -c Release
+
+      - name: Package
+        id: pkg
+        run: |
+          mkdir -p dist staging
+          cp Jellyfin.Plugin.PrivateLibraries/bin/Release/net9.0/Jellyfin.Plugin.PrivateLibraries.dll staging/
+          ZIP="private-libraries_${{ steps.ver.outputs.version }}.zip"
+          (cd staging && zip -r "../dist/$ZIP" .)
+          CHK=$(md5sum "dist/$ZIP" | awk '{print $1}')
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+          echo "checksum=$CHK" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: Private Libraries ${{ steps.ver.outputs.version }}
+          files: dist/${{ steps.pkg.outputs.zip }}
+          fail_on_unmatched_files: true
+
+      - name: Update manifest.json
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          CHECKSUM: ${{ steps.pkg.outputs.checksum }}
+          ZIP: ${{ steps.pkg.outputs.zip }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          python3 - <<'PY'
+          import json, os, datetime
+          version = os.environ['VERSION']
+          checksum = os.environ['CHECKSUM']
+          zipname = os.environ['ZIP']
+          repo = os.environ['REPO']
+          tag = os.environ['TAG']
+          source = f"https://github.com/{repo}/releases/download/{tag}/{zipname}"
+          ts = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+          with open('manifest.json') as f:
+              data = json.load(f)
+          plugin = data[0]
+          entry = {
+              "version": version,
+              "changelog": f"Release {version}",
+              "targetAbi": "10.11.0.0",
+              "sourceUrl": source,
+              "checksum": checksum,
+              "timestamp": ts,
+          }
+          vers = [v for v in plugin.get('versions', []) if v.get('version') != version]
+          vers.insert(0, entry)
+          plugin['versions'] = vers
+          with open('manifest.json', 'w') as f:
+              json.dump(data, f, indent=4)
+              f.write('\n')
+          PY
+
+      - name: Commit manifest to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          git commit -m "Update plugin manifest for ${{ steps.ver.outputs.version }}" || { echo "No manifest changes"; exit 0; }
+          git push origin HEAD:main
