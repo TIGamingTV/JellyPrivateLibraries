@@ -18,6 +18,11 @@ on Jellyfin's native per-user **allowed-tags whitelist** (`UserPolicy.AllowedTag
 - The **plugin configuration is the source of truth** (`PluginConfiguration.Users`
   and `.Grants`). Item tags and user policies are *derived* and re-applied by the
   reconcile task; never treat item tags as authoritative.
+- **Admin-hidden media** is the inverse: items in `PluginConfiguration.HiddenItems`
+  are tagged with a shared hidden tag `"<prefix>:hidden"` and that tag is added to
+  every non-admin user's `UserPolicy.BlockedTags` (admins are never blocked).
+  `BlockedTags` beats `AllowedTags`, so hidden items stay hidden even for a restricted
+  user who was also granted them. This applies to **all** users, not just opted-in ones.
 
 ## Key files
 
