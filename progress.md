@@ -2,6 +2,28 @@
 
 A running history of changes to JellyPrivateLibraries.
 
+## 2026-07-11 — Repository audit: reliability & security hardening
+
+Findings-driven, low-risk fixes (no version bump; behaviour is otherwise unchanged):
+
+- **Concurrency crash (reliability).** `RestrictionManager.OnItemAddedAsync` enumerated the
+  live `Config.Grants` list with no synchronization while it runs fire-and-forget for every
+  imported item. During a library scan this races reconcile / API mutations of the same list
+  and can throw `InvalidOperationException` ("Collection was modified"), aborting tag
+  application. It now snapshots the matching grants under the existing `_lock`, applies tags
+  outside the lock, then persists the cached item ids under the lock. Reconcile's post-grant
+  `SaveConfiguration` was likewise wrapped in the lock so the two writers can't collide.
+- **Permanent metadata lock leak (correctness).** Granting/hiding locks an item's `Tags`
+  field, but `RemoveTagFromItemAsync` never released it, so once the last grant was revoked
+  (or an item un-hidden) the `Tags` field stayed locked forever, blocking future metadata
+  refreshes from ever managing that item's tags again. It now unlocks `MetadataField.Tags`
+  only when no plugin-prefixed tags remain on the item (the shared hidden tag counts, so a
+  still-hidden item keeps its lock).
+- **Timing-safe webhook secret (security).** The Jellyseerr webhook compared the shared
+  secret with an ordinary ordinal string comparison, which short-circuits and is
+  timing-observable. Replaced with `CryptographicOperations.FixedTimeEquals` over UTF-8
+  bytes.
+
 ## 2026-07-11 — v1.0.0.5: admin-hidden media
 
 - New feature: the admin can pick movies/series on the plugin config page to hide
