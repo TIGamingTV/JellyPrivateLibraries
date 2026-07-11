@@ -50,9 +50,21 @@ public class RestrictionManager
     /// <returns>The personal tag.</returns>
     public static string BuildPersonalTag(Guid userId)
     {
-        var prefix = string.IsNullOrWhiteSpace(Config.TagPrefix) ? "jpl" : Config.TagPrefix.Trim();
-        return prefix + ":" + userId.ToString("N", CultureInfo.InvariantCulture);
+        return TagPrefix + ":" + userId.ToString("N", CultureInfo.InvariantCulture);
     }
+
+    /// <summary>
+    /// Builds the shared "hidden" tag applied to admin-hidden items. Every non-admin
+    /// user blocks this tag, so those items are visible to administrators only.
+    /// </summary>
+    /// <returns>The hidden tag.</returns>
+    public static string BuildHiddenTag()
+    {
+        return TagPrefix + ":hidden";
+    }
+
+    private static string TagPrefix =>
+        string.IsNullOrWhiteSpace(Config.TagPrefix) ? "jpl" : Config.TagPrefix.Trim();
 
     /// <summary>
     /// Ensures a configuration entry exists for the given user, creating one if needed.
@@ -158,6 +170,149 @@ public class RestrictionManager
             "Updated AllowedTags for user {UserId}: restriction {State}",
             userId,
             enabled ? "ENABLED" : "DISABLED");
+    }
+
+    /// <summary>
+    /// Ensures every non-admin user blocks the shared hidden tag (so admin-hidden items
+    /// are invisible to them) while administrators never block it. When no items are
+    /// hidden the tag is removed from everyone's policy as cleanup.
+    /// </summary>
+    /// <param name="userId">The user id.</param>
+    /// <returns>A task.</returns>
+    public async Task SyncUserBlockedTagsAsync(Guid userId)
+    {
+        var user = _userManager.GetUserById(userId);
+        if (user is null)
+        {
+            return;
+        }
+
+        var policy = _userManager.GetUserDto(user).Policy;
+        if (policy is null)
+        {
+            return;
+        }
+
+        var hiddenTag = BuildHiddenTag();
+        var shouldBlock = Config.HiddenItems.Count > 0 && !policy.IsAdministrator;
+
+        var blocked = (policy.BlockedTags ?? Array.Empty<string>())
+            .Where(t => !string.Equals(t, hiddenTag, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (shouldBlock)
+        {
+            blocked.Add(hiddenTag);
+        }
+
+        var newBlocked = blocked.ToArray();
+        var current = policy.BlockedTags ?? Array.Empty<string>();
+        if (current.Length == newBlocked.Length && !current.Except(newBlocked, StringComparer.OrdinalIgnoreCase).Any())
+        {
+            return; // No change.
+        }
+
+        policy.BlockedTags = newBlocked;
+        await _userManager.UpdatePolicyAsync(userId, policy).ConfigureAwait(false);
+        _logger.LogInformation(
+            "Updated BlockedTags for user {UserId}: hidden tag {State}",
+            userId,
+            shouldBlock ? "BLOCKED" : "CLEARED");
+    }
+
+    /// <summary>
+    /// Applies the current hidden-item blocked-tag state to every Jellyfin user.
+    /// </summary>
+    /// <returns>A task.</returns>
+    public async Task SyncAllBlockedTagsAsync()
+    {
+        foreach (var user in _userManager.GetUsers())
+        {
+            await SyncUserBlockedTagsAsync(user.Id).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Marks a library item as hidden from everyone except administrators, tagging it and
+    /// updating every non-admin user's policy immediately.
+    /// </summary>
+    /// <param name="itemId">The Jellyfin item id.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>True if the item was newly hidden.</returns>
+    public async Task<bool> AddHiddenItemAsync(Guid itemId, CancellationToken cancellationToken)
+    {
+        var item = _libraryManager.GetItemById(itemId);
+        if (item is null)
+        {
+            return false;
+        }
+
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (Config.HiddenItems.Any(h => h.ItemId == itemId))
+            {
+                return false;
+            }
+
+            Config.HiddenItems.Add(new HiddenItemEntry { ItemId = itemId, Name = item.Name ?? string.Empty });
+            Plugin.Instance!.SaveConfiguration();
+        }
+        finally
+        {
+            _lock.Release();
+        }
+
+        await AddTagToItemAsync(item, BuildHiddenTag(), cancellationToken).ConfigureAwait(false);
+        await SyncAllBlockedTagsAsync().ConfigureAwait(false);
+        return true;
+    }
+
+    /// <summary>
+    /// Un-hides a previously hidden item, removing its tag and refreshing user policies.
+    /// </summary>
+    /// <param name="itemId">The Jellyfin item id.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task.</returns>
+    public async Task RemoveHiddenItemAsync(Guid itemId, CancellationToken cancellationToken)
+    {
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            Config.HiddenItems.RemoveAll(h => h.ItemId == itemId);
+            Plugin.Instance!.SaveConfiguration();
+        }
+        finally
+        {
+            _lock.Release();
+        }
+
+        var item = _libraryManager.GetItemById(itemId);
+        if (item is not null)
+        {
+            await RemoveTagFromItemAsync(item, BuildHiddenTag(), cancellationToken).ConfigureAwait(false);
+        }
+
+        await SyncAllBlockedTagsAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Resolves the library items that are currently hidden (skipping any that no longer exist).
+    /// </summary>
+    /// <returns>The hidden items.</returns>
+    public IReadOnlyList<BaseItem> GetHiddenItems()
+    {
+        var items = new List<BaseItem>();
+        foreach (var hidden in Config.HiddenItems)
+        {
+            var item = _libraryManager.GetItemById(hidden.ItemId);
+            if (item is not null && items.All(i => i.Id != item.Id))
+            {
+                items.Add(item);
+            }
+        }
+
+        return items;
     }
 
     /// <summary>
@@ -444,7 +599,24 @@ public class RestrictionManager
 
         Plugin.Instance!.SaveConfiguration();
 
-        // 3. Strip personal tags from items that no longer have a backing grant.
+        // 3. (Re)apply the hidden tag to every admin-hidden item and push the
+        //    blocked-tag state to all users (hiding applies to everyone, not just
+        //    the plugin-managed/opted-in users).
+        var hiddenTag = BuildHiddenTag();
+        foreach (var hidden in Config.HiddenItems.ToList())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var item = _libraryManager.GetItemById(hidden.ItemId);
+            if (item is not null)
+            {
+                await AddTagToItemAsync(item, hiddenTag, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        await SyncAllBlockedTagsAsync().ConfigureAwait(false);
+        progress?.Report(90);
+
+        // 4. Strip personal/hidden tags from items that no longer have a backing grant.
         await CleanOrphanTagsAsync(cancellationToken).ConfigureAwait(false);
         progress?.Report(100);
     }
@@ -466,6 +638,14 @@ public class RestrictionManager
             {
                 expected.Add(item.Id.ToString("N", CultureInfo.InvariantCulture) + "|" + tag);
             }
+        }
+
+        // The shared hidden tag also starts with the prefix; keep it on every
+        // still-hidden item so it is not treated as an orphan and stripped.
+        var hiddenTag = BuildHiddenTag();
+        foreach (var hidden in Config.HiddenItems)
+        {
+            expected.Add(hidden.ItemId.ToString("N", CultureInfo.InvariantCulture) + "|" + hiddenTag);
         }
 
         var tagged = _libraryManager.GetItemList(new InternalItemsQuery

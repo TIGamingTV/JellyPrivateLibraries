@@ -2,6 +2,26 @@
 
 A running history of changes to JellyPrivateLibraries.
 
+## 2026-07-11 — v1.0.0.5: admin-hidden media
+
+- New feature: the admin can pick movies/series on the plugin config page to hide
+  from **everyone except administrators**, independent of each user's own restriction.
+- Mechanism: a shared hidden tag `<prefix>:hidden` is applied (and locked) to each
+  hidden item; every non-admin user's `UserPolicy.BlockedTags` gets that tag, while
+  admins never do. `BlockedTags` takes precedence over `AllowedTags`, so a hidden item
+  stays hidden even if a restricted user was also granted it. When the last hidden item
+  is removed the tag is cleared from every policy (self-cleaning).
+- `PluginConfiguration`: added `HiddenItems` (`List<HiddenItemEntry>` of ItemId + cached Name).
+- `RestrictionManager`: `BuildHiddenTag`, `AddHiddenItemAsync`/`RemoveHiddenItemAsync`,
+  `GetHiddenItems`, `SyncUserBlockedTagsAsync`/`SyncAllBlockedTagsAsync`. Reconcile now
+  re-applies the hidden tag to all hidden items and syncs BlockedTags for **all** users
+  (hiding is server-wide, not opt-in scoped); orphan cleanup preserves the hidden tag.
+- `RestrictionController`: admin-only (`Policies.RequiresElevation`) endpoints
+  `GET/POST Hidden`, `DELETE Hidden/{itemId}`, `GET Hidden/Search`.
+- Config page: new "Hidden media" section (search → Hide, list → Unhide) that calls the
+  admin endpoints directly via `ApiClient.ajax` and takes effect immediately.
+- Bumped `1.0.0.4` → `1.0.0.5`.
+
 ## 2026-07-10 — v1.0.0.4: make restriction opt-in (not mandatory)
 
 - The plugin restricted every user by default, so libraries started hidden and the

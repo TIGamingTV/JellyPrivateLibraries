@@ -83,6 +83,27 @@
                     </button>
                 </div>
             </form>
+
+            <div class="verticalSection" style="margin-top:2em;">
+                <h2 class="sectionTitle">Hidden media</h2>
+                <p class="fieldDescription">
+                    Hide selected movies or series from <strong>every user except administrators</strong>.
+                    Hidden titles disappear from all non-admin libraries immediately, regardless of each
+                    user's own restriction setting. Changes take effect right away; the periodic reconcile
+                    task keeps them enforced.
+                </p>
+
+                <div id="hiddenError" class="fieldDescription" style="display:none;color:#ff8080;"></div>
+
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="HiddenSearch">Find a title to hide</label>
+                    <input is="emby-input" type="search" id="HiddenSearch" placeholder="Type to search the library…" />
+                </div>
+                <div id="hiddenSearchResults"></div>
+
+                <h3 class="sectionTitle" style="margin-top:1.5em;">Currently hidden</h3>
+                <div id="hiddenList"><p class="fieldDescription">Loading…</p></div>
+            </div>
         </div>
     </div>
 
@@ -122,6 +143,107 @@
                 });
                 return false;
             });
+
+        // ---- Hidden media management (independent of the Save button above) ----
+        (function () {
+            var errorBox = document.querySelector('#hiddenError');
+            var searchInput = document.querySelector('#HiddenSearch');
+            var searchResults = document.querySelector('#hiddenSearchResults');
+            var hiddenList = document.querySelector('#hiddenList');
+            var searchTimer;
+
+            function apiGet(path) {
+                return ApiClient.ajax({ type: 'GET', url: ApiClient.getUrl('PrivateLibraries/' + path), dataType: 'json' });
+            }
+            function apiSend(method, path, body) {
+                var req = { type: method, url: ApiClient.getUrl('PrivateLibraries/' + path), dataType: 'json' };
+                if (body !== undefined) {
+                    req.data = JSON.stringify(body);
+                    req.contentType = 'application/json';
+                }
+                return ApiClient.ajax(req);
+            }
+            function showError(context, err) {
+                var status = (err && (err.status || (err.response && err.response.status))) || '';
+                errorBox.textContent = context + ' failed' + (status ? ' (HTTP ' + status + ')' : '') + '.';
+                errorBox.style.display = 'block';
+            }
+            function clearError() { errorBox.style.display = 'none'; }
+            function escapeHtml(s) {
+                return String(s).replace(/[&<>"']/g, function (c) {
+                    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+                });
+            }
+            function itemRow(item, label, cls, onClick) {
+                var row = document.createElement('div');
+                row.style.cssText = 'display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid rgba(128,128,128,.25);';
+                var info = document.createElement('div');
+                info.style.flex = '1';
+                info.innerHTML = '<div>' + escapeHtml(item.Name || '(untitled)') + '</div>'
+                    + '<div class="fieldDescription" style="margin:0;">' + escapeHtml((item.Type || '') + (item.Year ? ' · ' + item.Year : '')) + '</div>';
+                row.appendChild(info);
+                var btn = document.createElement('button');
+                btn.setAttribute('is', 'emby-button');
+                btn.type = 'button';
+                btn.className = 'raised ' + cls;
+                btn.style.cssText = 'flex:0 0 auto;min-width:0;padding:0 14px;';
+                btn.textContent = label;
+                btn.addEventListener('click', function () { onClick(btn); });
+                row.appendChild(btn);
+                return row;
+            }
+
+            function loadHidden() {
+                apiGet('Hidden').then(function (items) {
+                    hiddenList.innerHTML = '';
+                    if (!items || !items.length) {
+                        hiddenList.innerHTML = '<p class="fieldDescription">No hidden titles.</p>';
+                        return;
+                    }
+                    items.forEach(function (item) {
+                        hiddenList.appendChild(itemRow(item, 'Unhide', 'button-cancel', function (btn) {
+                            clearError();
+                            btn.disabled = true;
+                            apiSend('DELETE', 'Hidden/' + item.ItemId).then(function () {
+                                loadHidden();
+                            }).catch(function (err) { btn.disabled = false; showError('Un-hiding title', err); });
+                        }));
+                    });
+                }).catch(function (err) {
+                    hiddenList.innerHTML = '';
+                    showError('Loading hidden titles', err);
+                });
+            }
+
+            searchInput.addEventListener('input', function () {
+                clearTimeout(searchTimer);
+                var q = searchInput.value.trim();
+                searchTimer = setTimeout(function () {
+                    if (!q) { searchResults.innerHTML = ''; return; }
+                    clearError();
+                    apiGet('Hidden/Search?query=' + encodeURIComponent(q)).then(function (items) {
+                        searchResults.innerHTML = '';
+                        if (!items || !items.length) {
+                            searchResults.innerHTML = '<p class="fieldDescription">No matches.</p>';
+                            return;
+                        }
+                        items.forEach(function (item) {
+                            searchResults.appendChild(itemRow(item, 'Hide', 'button-submit', function (btn) {
+                                clearError();
+                                btn.disabled = true;
+                                apiSend('POST', 'Hidden', { ItemId: item.ItemId }).then(function () {
+                                    btn.textContent = 'Hidden';
+                                    loadHidden();
+                                }).catch(function (err) { btn.disabled = false; showError('Hiding title', err); });
+                            }));
+                        });
+                    }).catch(function (err) { showError('Searching', err); });
+                }, 300);
+            });
+
+            document.querySelector('#privateLibrariesConfigPage')
+                .addEventListener('pageshow', loadHidden);
+        })();
     </script>
 </div>
 </body>

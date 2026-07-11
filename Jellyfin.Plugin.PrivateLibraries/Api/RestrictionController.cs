@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Data.Enums;
 using Jellyfin.Plugin.PrivateLibraries.Services;
+using MediaBrowser.Common.Api;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Net;
@@ -230,6 +231,92 @@ public class RestrictionController : ControllerBase
         });
 
         return Ok(items.Select(ToDto).ToList());
+    }
+
+    /// <summary>
+    /// Lists the items the admin has hidden from everyone except administrators.
+    /// </summary>
+    /// <returns>The hidden items.</returns>
+    [HttpGet("Hidden")]
+    [Authorize(Policy = Policies.RequiresElevation)]
+    public ActionResult<IEnumerable<ItemDto>> GetHidden()
+    {
+        return Ok(_restrictionManager.GetHiddenItems().Select(ToDto).ToList());
+    }
+
+    /// <summary>
+    /// Searches the whole library for movies/series the admin can hide.
+    /// </summary>
+    /// <param name="query">The search term.</param>
+    /// <returns>Matching items.</returns>
+    [HttpGet("Hidden/Search")]
+    [Authorize(Policy = Policies.RequiresElevation)]
+    public ActionResult<IEnumerable<ItemDto>> SearchHidden([FromQuery] string? query)
+    {
+        var items = _libraryManager.GetItemList(new InternalItemsQuery
+        {
+            IncludeItemTypes = _grantableKinds,
+            Recursive = true,
+            IsVirtualItem = false,
+            SearchTerm = string.IsNullOrWhiteSpace(query) ? null : query,
+            Limit = 50
+        });
+
+        return Ok(items.Select(ToDto).ToList());
+    }
+
+    /// <summary>
+    /// Hides a library item from everyone except administrators.
+    /// </summary>
+    /// <param name="body">The request body.</param>
+    /// <returns>An acknowledgement.</returns>
+    [HttpPost("Hidden")]
+    [Authorize(Policy = Policies.RequiresElevation)]
+    public async Task<ActionResult> AddHidden([FromBody] GrantItemDto body)
+    {
+        if (!Guid.TryParse(body.ItemId, out var itemId) || _libraryManager.GetItemById(itemId) is null)
+        {
+            return BadRequest("Unknown item id.");
+        }
+
+        try
+        {
+            await _restrictionManager.AddHiddenItemAsync(itemId, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to hide item {ItemId}", itemId);
+            return StatusCode(500, new { error = ex.Message });
+        }
+
+        return Ok(new { ok = true });
+    }
+
+    /// <summary>
+    /// Un-hides a previously hidden item.
+    /// </summary>
+    /// <param name="itemId">The item id.</param>
+    /// <returns>An acknowledgement.</returns>
+    [HttpDelete("Hidden/{itemId}")]
+    [Authorize(Policy = Policies.RequiresElevation)]
+    public async Task<ActionResult> RemoveHidden([FromRoute] string itemId)
+    {
+        if (!Guid.TryParse(itemId, out var parsed))
+        {
+            return BadRequest("Invalid item id.");
+        }
+
+        try
+        {
+            await _restrictionManager.RemoveHiddenItemAsync(parsed, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to un-hide item {ItemId}", parsed);
+            return StatusCode(500, new { error = ex.Message });
+        }
+
+        return Ok(new { ok = true });
     }
 
     /// <summary>

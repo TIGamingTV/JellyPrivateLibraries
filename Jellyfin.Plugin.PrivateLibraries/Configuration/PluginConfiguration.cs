@@ -48,6 +48,29 @@ public class PluginConfiguration : BasePluginConfiguration
     /// Gets or sets the media grants (which user can see which item).
     /// </summary>
     public List<GrantEntry> Grants { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets the items the admin has chosen to hide from everyone except administrators.
+    /// These are tagged with the shared hidden tag and blocked in every non-admin user's policy.
+    /// </summary>
+    public List<HiddenItemEntry> HiddenItems { get; set; } = new();
+}
+
+/// <summary>
+/// A single admin-hidden item. The item is hidden from every non-administrator
+/// regardless of their own restriction state.
+/// </summary>
+public class HiddenItemEntry
+{
+    /// <summary>
+    /// Gets or sets the Jellyfin item id to hide.
+    /// </summary>
+    public Guid ItemId { get; set; }
+
+    /// <summary>
+    /// Gets or sets a cached display name for the item (shown on the config page).
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
 }
 
 /// <summary>
