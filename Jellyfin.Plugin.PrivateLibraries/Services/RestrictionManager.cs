@@ -512,25 +512,54 @@ public class RestrictionManager
             return;
         }
 
-        var matching = Config.Grants.Where(g =>
-            g.ItemId == Guid.Empty
-            && !string.IsNullOrEmpty(g.ProviderName)
-            && item.ProviderIds.TryGetValue(g.ProviderName, out var value)
-            && string.Equals(value, g.ProviderId, StringComparison.OrdinalIgnoreCase))
-            .ToList();
+        // Snapshot the matching grants under the lock. This handler runs fire-and-forget
+        // for every imported item (potentially thousands during a scan), so it can race
+        // with reconcile / API handlers mutating Config.Grants; enumerating the live list
+        // here without synchronization can throw "Collection was modified".
+        List<GrantEntry> matching;
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            matching = Config.Grants.Where(g =>
+                g.ItemId == Guid.Empty
+                && !string.IsNullOrEmpty(g.ProviderName)
+                && item.ProviderIds.TryGetValue(g.ProviderName, out var value)
+                && string.Equals(value, g.ProviderId, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+        finally
+        {
+            _lock.Release();
+        }
+
+        if (matching.Count == 0)
+        {
+            return;
+        }
 
         foreach (var grant in matching)
         {
             var tag = Config.Users.FirstOrDefault(u => u.UserId == grant.UserId)?.PersonalTag
                       ?? BuildPersonalTag(grant.UserId);
             await AddTagToItemAsync(item, tag, cancellationToken).ConfigureAwait(false);
-            grant.ItemId = item.Id;
             _logger.LogInformation("Applied pending grant for user {UserId} to newly added item {Item}", grant.UserId, item.Name);
         }
 
-        if (matching.Count > 0)
+        // Cache the resolved item id and persist under the lock so we don't collide with a
+        // concurrent SaveConfiguration from reconcile.
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
+            foreach (var grant in matching)
+            {
+                grant.ItemId = item.Id;
+            }
+
             Plugin.Instance!.SaveConfiguration();
+        }
+        finally
+        {
+            _lock.Release();
         }
     }
 
@@ -597,7 +626,17 @@ public class RestrictionManager
             progress?.Report(25 + (60.0 * (i + 1) / Math.Max(1, grants.Count)));
         }
 
-        Plugin.Instance!.SaveConfiguration();
+        // Persist the resolved item ids cached by ApplyGrantAsync under the lock so this
+        // write cannot race with a concurrent SaveConfiguration from the item-added handler.
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            Plugin.Instance!.SaveConfiguration();
+        }
+        finally
+        {
+            _lock.Release();
+        }
 
         // 3. (Re)apply the hidden tag to every admin-hidden item and push the
         //    blocked-tag state to all users (hiding applies to everyone, not just
@@ -694,11 +733,24 @@ public class RestrictionManager
     private async Task RemoveTagFromItemAsync(BaseItem item, string tag, CancellationToken cancellationToken)
     {
         var tags = (item.Tags ?? Array.Empty<string>()).ToList();
-        if (tags.RemoveAll(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase)) > 0)
+        if (tags.RemoveAll(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase)) == 0)
         {
-            item.Tags = tags.ToArray();
-            await _libraryManager.UpdateItemAsync(item, item.GetParent() ?? item, ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+            return;
         }
+
+        item.Tags = tags.ToArray();
+
+        // Once no plugin-managed tags remain on the item, release the Tags-field lock we
+        // took when granting/hiding. Otherwise the lock would persist forever after the
+        // last grant is revoked (or the item is un-hidden), permanently preventing
+        // metadata refreshes from ever managing this item's tags again.
+        var prefix = TagPrefix + ":";
+        if (!tags.Any(t => t.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+        {
+            UnlockTagsField(item);
+        }
+
+        await _libraryManager.UpdateItemAsync(item, item.GetParent() ?? item, ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
     }
 
     private static void LockTagsField(BaseItem item)
@@ -709,5 +761,16 @@ public class RestrictionManager
             locked.Add(MetadataField.Tags);
             item.LockedFields = locked.ToArray();
         }
+    }
+
+    private static void UnlockTagsField(BaseItem item)
+    {
+        var locked = item.LockedFields;
+        if (locked is null || locked.Length == 0 || !locked.Contains(MetadataField.Tags))
+        {
+            return;
+        }
+
+        item.LockedFields = locked.Where(f => f != MetadataField.Tags).ToArray();
     }
 }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -335,7 +336,7 @@ public class RestrictionController : ControllerBase
             return StatusCode(403);
         }
 
-        if (!string.Equals(payload.Secret, config.JellyseerrWebhookSecret, StringComparison.Ordinal))
+        if (!SecretsMatch(payload.Secret, config.JellyseerrWebhookSecret))
         {
             _logger.LogWarning("Rejected Jellyseerr webhook: bad secret");
             return Unauthorized();
@@ -396,6 +397,17 @@ public class RestrictionController : ControllerBase
     {
         var info = await _authContext.GetAuthorizationInfo(Request).ConfigureAwait(false);
         return info.UserId;
+    }
+
+    /// <summary>
+    /// Compares the presented webhook secret against the configured one in fixed time so
+    /// the endpoint does not leak the secret through response-timing differences.
+    /// </summary>
+    private static bool SecretsMatch(string? provided, string expected)
+    {
+        var providedBytes = Encoding.UTF8.GetBytes(provided ?? string.Empty);
+        var expectedBytes = Encoding.UTF8.GetBytes(expected);
+        return CryptographicOperations.FixedTimeEquals(providedBytes, expectedBytes);
     }
 
     private static ItemDto ToDto(BaseItem item) => new()
