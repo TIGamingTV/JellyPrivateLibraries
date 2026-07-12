@@ -37,9 +37,15 @@ on Jellyfin's native per-user **allowed-tags whitelist** (`UserPolicy.AllowedTag
   `IAuthorizationContext.GetAuthorizationInfo(Request)`) + `/PrivateLibraries/Webhook`.
   Authenticated endpoints use bare `[Authorize]` — the old `DefaultAuthorization`
   policy was removed in 10.11 and naming it throws "policy not found" (500).
+- `Services/ItemAddedListener.cs` — `IHostedService` that hooks
+  `ILibraryManager.ItemAdded` and calls `RestrictionManager.OnItemAddedAsync`
+  fire-and-forget to tag newly imported media matching a pending grant.
 - `Services/ScriptInjector.cs` — patches `index.html` (Intro-Skipper pattern).
 - `Web/private-libraries.js` — injected widget (vanilla JS, no build step).
 - `ScheduledTasks/ReconcileTask.cs` — startup + 30-min interval reconcile.
+- `Configuration/PluginConfiguration.cs` — the source of truth (`Users`,
+  `Grants`, `HiddenItems`, `TagPrefix`, `RestrictNewUsersByDefault`,
+  `SchemaVersion`) + config page (`configPage.html`).
 
 ## Jellyfin API notes (target 10.11 / master)
 
@@ -57,9 +63,24 @@ dotnet build Jellyfin.Plugin.PrivateLibraries/Jellyfin.Plugin.PrivateLibraries.c
 ```
 
 There is no unit test project yet. Manual verification: load the DLL into a test
-Jellyfin (10.11), create two users, confirm each starts restricted, grant a title
-via the widget, toggle restriction off/on, and fire a Jellyseerr test/approved
-webhook. See `progress.md` for history.
+Jellyfin (10.11), create two users, confirm each starts **unrestricted** (restriction
+is opt-in since v1.0.0.4 — `RestrictNewUsersByDefault` defaults to `false`), toggle
+restriction on from the widget and confirm the library then narrows to granted titles,
+grant a title, toggle restriction off/on, and fire a Jellyseerr test/approved webhook.
+See `progress.md` for history.
+
+## Releasing
+
+- `.github/workflows/release.yml` runs on a pushed `v*` tag (or manual dispatch):
+  it builds, packages the DLL as `private-libraries_<version>.zip`, creates a
+  GitHub release, then prepends a new entry to `manifest.json` and commits it to
+  `main` as `github-actions[bot]`. So `manifest.json` is release-driven — the tag
+  is the trigger, not the source-tree version fields.
+- The tag version can therefore run ahead of `csproj`/`build.yaml` if a release is
+  cut without bumping those files. As of 1.0.0.6 (audit fixes) that drift exists:
+  `manifest.json` lists 1.0.0.6 while `csproj`/`build.yaml` still read 1.0.0.5.
+  Bump `AssemblyVersion`/`FileVersion`/`Version` (csproj) and `build.yaml` in the
+  same change set as the tag to keep them aligned.
 
 ## Conventions
 

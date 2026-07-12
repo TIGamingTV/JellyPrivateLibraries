@@ -2,6 +2,23 @@
 
 A running history of changes to JellyPrivateLibraries.
 
+## 2026-07-12 — Docs sync + 1.0.0.6 release note
+
+- Documentation refresh (no behaviour change):
+  - `CLAUDE.md` "Build & verify" corrected — users start **unrestricted**, not
+    restricted (restriction has been opt-in since v1.0.0.4); verification now says to
+    toggle restriction *on* and confirm the library narrows.
+  - `CLAUDE.md` "Key files" now lists `Services/ItemAddedListener.cs` (the
+    `IHostedService` wiring `ILibraryManager.ItemAdded` → `OnItemAddedAsync`) and
+    `Configuration/PluginConfiguration.cs` (the source of truth).
+  - Added a `CLAUDE.md` "Releasing" section describing the tag-driven
+    `release.yml` flow and the manifest-vs-source version drift.
+- Release note: the 2026-07-11 audit fixes were published as **1.0.0.6** via a
+  `v1.0.0.6` tag; `release.yml` auto-prepended the manifest entry and committed it to
+  `main` (`f143421`). The audit itself was source-version-neutral, so `csproj`/`build.yaml`
+  still read **1.0.0.5** while `manifest.json` leads at **1.0.0.6** — a known drift to
+  reconcile on the next intentional version bump.
+
 ## 2026-07-11 — Repository audit: reliability & security hardening
 
 Findings-driven, low-risk fixes (no version bump; behaviour is otherwise unchanged):
