@@ -132,7 +132,33 @@
             var status = (err && (err.status || (err.response && err.response.status))) || '';
             // eslint-disable-next-line no-console
             console.error('[PrivateLibraries] ' + context + ' failed', err);
-            showError(context + ' failed' + (status ? ' (HTTP ' + status + ')' : '') + '. See browser console / server log.');
+
+            function render(detail) {
+                var msg = context + ' failed' + (status ? ' (HTTP ' + status + ')' : '');
+                msg += detail ? ': ' + detail : '. See browser console / server log.';
+                showError(msg);
+            }
+
+            // The controller returns the real exception message in the 500 body as
+            // { "error": "..." }. Dig it out of whatever shape ApiClient.ajax rejected with
+            // (jqXHR-style responseJSON/responseText, or a fetch Response we must read async).
+            function extract(body) {
+                if (!body) { return ''; }
+                if (typeof body === 'string') {
+                    try { return (JSON.parse(body) || {}).error || body; } catch (e) { return body; }
+                }
+                return body.error || body.message || '';
+            }
+
+            var immediate = extract(err && (err.responseJSON || err.responseText));
+            if (immediate) { render(immediate); return; }
+
+            if (err && typeof err.text === 'function') {
+                err.text().then(function (t) { render(extract(t)); }).catch(function () { render(''); });
+                return;
+            }
+
+            render('');
         }
 
         // Restriction toggle.
