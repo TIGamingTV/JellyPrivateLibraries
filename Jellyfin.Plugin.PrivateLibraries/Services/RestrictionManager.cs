@@ -110,19 +110,56 @@ public class RestrictionManager
     /// <returns>A task.</returns>
     public async Task SetRestrictionEnabledAsync(Guid userId, bool enabled)
     {
+        // Update the in-memory flag first so SyncUserPolicyAsync applies the new state,
+        // but only persist it to disk once the policy write actually succeeds. Otherwise a
+        // failed UpdatePolicyAsync would leave the saved config claiming a restriction state
+        // the user's library doesn't reflect — the toggle would look "stuck".
+        bool previous;
         await _lock.WaitAsync().ConfigureAwait(false);
         try
         {
             var entry = EnsureUserEntryLocked(userId);
+            previous = entry.RestrictionEnabled;
             entry.RestrictionEnabled = enabled;
-            Plugin.Instance!.SaveConfiguration();
         }
         finally
         {
             _lock.Release();
         }
 
-        await SyncUserPolicyAsync(userId).ConfigureAwait(false);
+        try
+        {
+            await SyncUserPolicyAsync(userId).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Roll the in-memory flag back so config and the live policy stay consistent.
+            await _lock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var entry = Config.Users.FirstOrDefault(u => u.UserId == userId);
+                if (entry is not null)
+                {
+                    entry.RestrictionEnabled = previous;
+                }
+            }
+            finally
+            {
+                _lock.Release();
+            }
+
+            throw;
+        }
+
+        await _lock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            Plugin.Instance!.SaveConfiguration();
+        }
+        finally
+        {
+            _lock.Release();
+        }
     }
 
     /// <summary>

@@ -2,6 +2,36 @@
 
 A running history of changes to JellyPrivateLibraries.
 
+## 2026-07-12 — Fix "stuck" restriction toggle + surface real error
+
+User report: tapping the widget restriction switch **off** returns an error and the
+switch snaps back to on. Investigation:
+
+- The switch reverts because `POST /PrivateLibraries/Me/Restriction` returns HTTP 500;
+  the widget's `catch` flips the checkbox back and shows the status
+  (`Web/private-libraries.js`). Enable and disable run identical code, so this is not
+  disable-specific — the switch only *looks* stuck on because `GET Me` reports the
+  **config flag** (`UserRestrictionEntry.RestrictionEnabled`), not the live policy.
+- The 500 is thrown by `RestrictionManager.SetRestrictionEnabledAsync` →
+  `SyncUserPolicyAsync` → `IUserManager.UpdatePolicyAsync`. That toggle path is
+  unchanged since v1.0.0.4 (recorded here as "verified working") and is the same
+  full-policy round-trip Jellyfin's own user dashboard performs, so the logic is sound;
+  the real exception is environmental and is logged as "Failed to set restriction for
+  user …" (`RestrictionController.cs`).
+
+Changes (no version bump; diagnostics + a real correctness fix):
+
+- **`SetRestrictionEnabledAsync` no longer desyncs config from policy.** It now flips the
+  in-memory `RestrictionEnabled` flag, runs the policy sync, and only `SaveConfiguration()`
+  **after** the policy write succeeds; on failure it rolls the flag back and rethrows. So a
+  failed toggle can no longer leave the saved config asserting a state the library doesn't
+  reflect (the "stuck" symptom), and a successful toggle is durably persisted.
+- **Widget now surfaces the server's real error.** `fail()` digs the `{ "error": "…" }`
+  message out of the 500 body (jqXHR `responseJSON`/`responseText` or a fetch `Response`
+  read async) and shows it inline instead of a bare "HTTP 500", so the true root cause is
+  visible in the UI. Requires a new plugin build + hard refresh of the web client (the
+  widget JS is an embedded resource served from the DLL).
+
 ## 2026-07-12 — Docs sync + 1.0.0.6 release note
 
 - Documentation refresh (no behaviour change):
