@@ -40,7 +40,15 @@ on Jellyfin's native per-user **allowed-tags whitelist** (`UserPolicy.AllowedTag
 - `Services/ItemAddedListener.cs` — `IHostedService` that hooks
   `ILibraryManager.ItemAdded` and calls `RestrictionManager.OnItemAddedAsync`
   fire-and-forget to tag newly imported media matching a pending grant.
-- `Services/ScriptInjector.cs` — patches `index.html` (Intro-Skipper pattern).
+- `Services/ScriptInjector.cs` — injects the widget `<script>` tag into `index.html`.
+  Prefers registering a transformation with the community "File Transformation" plugin
+  (https://github.com/IAmParadox27/jellyfin-plugin-file-transformation, discovered via
+  reflection since plugins load into separate assembly contexts) so the file is patched
+  in memory per-request, same mechanism other plugins (Intro Skipper, Home Screen
+  Sections) use — this doesn't clobber their injections either. Falls back to directly
+  read/patch/write of `index.html` (old Intro-Skipper-style pattern, marker-delimited)
+  only if that plugin isn't installed. See `Services/FileTransformationPayload.cs` for
+  the callback payload type.
 - `Web/private-libraries.js` — injected widget (vanilla JS, no build step).
 - `ScheduledTasks/ReconcileTask.cs` — startup + 30-min interval reconcile.
 - `Configuration/PluginConfiguration.cs` — the source of truth (`Users`,

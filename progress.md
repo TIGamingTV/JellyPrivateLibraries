@@ -2,6 +2,43 @@
 
 A running history of changes to JellyPrivateLibraries.
 
+## 2026-08-09 — Inject via the File Transformation plugin, direct patch as fallback
+
+`Services/ScriptInjector.cs` previously always wrote the widget `<script>` tag straight
+into `index.html` on disk. That's now the **fallback**; the preferred path registers a
+transformation with the community "File Transformation" plugin
+(https://github.com/IAmParadox27/jellyfin-plugin-file-transformation), which patches
+served files in memory per-request and is the mechanism other Jellyfin plugins (Intro
+Skipper, Home Screen Sections, Plugin Pages, etc.) use to inject content without
+clobbering each other's edits.
+
+- On `StartAsync`, `ScriptInjector` looks for a loaded assembly whose name contains
+  `.FileTransformation` across all `AssemblyLoadContext`s (that plugin can't be
+  referenced directly — plugins load into separate contexts — so discovery/invocation
+  is reflection-based, per its documented integration contract). If found, it registers
+  `TransformIndexHtml` (a new `public static` callback) as an `index.html` transformation
+  using a fixed transformation GUID (stable across restarts/releases so re-registering
+  replaces rather than duplicates).
+  - The registration payload is a hand-built JSON string parsed via the target
+    assembly's *own* `JObject.Parse` (resolved reflectively from the registration
+    method's parameter type) rather than via a bundled `Newtonsoft.Json` package
+    reference: the release workflow (`.github/workflows/release.yml`) zips only the
+    single plugin DLL with no dependency-copying step, so adding a NuGet dependency
+    would have silently broken every release. This keeps the plugin a self-contained
+    single DLL.
+  - If File Transformation is present, any stale marker block previously written
+    directly into `index.html` (by an older plugin version, or an earlier run before
+    File Transformation was installed) is cleaned up so the button doesn't end up
+    duplicated.
+- If the plugin isn't installed, behavior is unchanged from before: direct read/patch/
+  write of `index.html` guarded by the `<!-- PrivateLibraries:begin/end -->` markers.
+- New file: `Services/FileTransformationPayload.cs` — the POCO (`Contents` string
+  property) the File Transformation plugin deserializes its callback payload into; no
+  new package dependency required for this either since it has no Newtonsoft-specific
+  types in its signature.
+- Verified with `dotnet build -c Release`: 0 warnings/errors, single-DLL output
+  unchanged (no new files in `bin/Release/net9.0/`).
+
 ## 2026-07-12 — Fix "stuck" restriction toggle + surface real error
 
 User report: tapping the widget restriction switch **off** returns an error and the
