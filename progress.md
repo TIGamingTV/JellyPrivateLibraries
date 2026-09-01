@@ -2,6 +2,37 @@
 
 A running history of changes to JellyPrivateLibraries.
 
+## 2026-09-01 — Separate the "re-find this item" key from the Jellyseerr request key
+
+**Root cause of the 1.0.0.9 Jellyseerr breakage.** `GrantEntry.ProviderName`/`ProviderId`
+were exclusively a *Jellyseerr request's identity*: the webhook dedupes on them and a
+still-pending grant is resolved by them. The upgrade-follow fix overloaded those same two
+fields with a second, unrelated meaning — "how to re-find this item if its id goes stale" —
+and the schema-2 migration then rewrote **every existing manual grant** into that shared
+namespace. From that point manual grants were indistinguishable from Jellyseerr requests
+throughout the resolution and dedup logic, and Seerr granting broke.
+
+Fixed by giving the second meaning its own key:
+
+- New `GrantEntry.MatchProviderName` / `MatchProviderId`. `AddManualGrantAsync` writes only
+  these; `ProviderName`/`ProviderId` are now written **only** by `AddSeerrGrantAsync`.
+- `GetLookupKey(grant)` returns the Seerr key when present, else the Match key, so a Seerr
+  grant resolves exactly as it did before this whole change set.
+- `ResolveGrantItems`, `ApplyGrantAsync` and `OnItemAddedAsync` restored to their original
+  behaviour for Seerr grants, with the file-replacement case added as a strictly *additional*
+  clause (`ItemId` dangling) rather than by broadening the existing one. `ApplyGrantAsync`
+  again only re-points `ItemId` when it is empty or dangling; `OnItemAddedAsync` again
+  matches pending grants via `ItemId == Guid.Empty` and only additionally matches a grant
+  whose cached item no longer exists.
+- `RemoveGrantAsync` matches on the Match key instead of the Seerr key.
+- **Schema 3 migration repairs configs already damaged by 1.0.0.9**: for every non-Seerr
+  grant it moves `ProviderName`/`ProviderId` into the Match fields and clears them, then
+  backfills a Match key for manual grants that never had one. Schema 2's backfill was
+  removed outright — a config sitting at v1 or v2 lands correctly on v3 either way.
+
+The general lesson: the previous two attempts treated the symptom (dedup collision, then
+webhook field names) while the defect was that one field pair had been given two meanings.
+
 ## 2026-09-01 — Fix Jellyseerr grants being silently swallowed (regression from 1.0.0.9)
 
 **Regression introduced by the previous change.** `AddSeerrGrantAsync` dedupes an incoming
