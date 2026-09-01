@@ -351,6 +351,7 @@ public class RestrictionController : ControllerBase
         // Only grant once a request is approved/available.
         if (type != "MEDIA_APPROVED" && type != "MEDIA_AUTO_APPROVED" && type != "MEDIA_AVAILABLE")
         {
+            _logger.LogInformation("Ignoring Jellyseerr notification of type {Type}", type);
             return Ok(new { message = "Ignored notification type " + type });
         }
 

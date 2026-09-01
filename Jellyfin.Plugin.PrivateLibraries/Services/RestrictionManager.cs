@@ -445,6 +445,7 @@ public class RestrictionManager
     public async Task AddSeerrGrantAsync(Guid userId, string providerName, string providerId, CancellationToken cancellationToken)
     {
         GrantEntry grant;
+        bool created;
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -453,25 +454,41 @@ public class RestrictionManager
                 g.UserId == userId
                 && string.Equals(g.ProviderName, providerName, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(g.ProviderId, providerId, StringComparison.OrdinalIgnoreCase));
-            if (existing is not null)
-            {
-                return;
-            }
 
-            grant = new GrantEntry
+            // A grant for this title may already exist — a repeated webhook, or a manual
+            // grant for the same title (manual grants carry provider ids too). Never drop the
+            // request on the floor in that case: reuse the existing entry and still run
+            // ApplyGrantAsync below so the tag is asserted even if the earlier grant was
+            // never applied or its item has since been replaced.
+            created = existing is null;
+            if (created)
             {
-                UserId = userId,
-                ProviderName = providerName,
-                ProviderId = providerId,
-                Source = "Seerr"
-            };
-            Config.Grants.Add(grant);
-            Plugin.Instance!.SaveConfiguration();
+                grant = new GrantEntry
+                {
+                    UserId = userId,
+                    ProviderName = providerName,
+                    ProviderId = providerId,
+                    Source = "Seerr"
+                };
+                Config.Grants.Add(grant);
+                Plugin.Instance!.SaveConfiguration();
+            }
+            else
+            {
+                grant = existing!;
+            }
         }
         finally
         {
             _lock.Release();
         }
+
+        _logger.LogInformation(
+            "Jellyseerr grant for user {UserId} ({Provider}={ProviderId}): {Action}",
+            userId,
+            providerName,
+            providerId,
+            created ? "created" : "already existed, re-applying");
 
         // Item may not be imported yet; ApplyGrantAsync is a no-op until it exists.
         await ApplyGrantAsync(grant, cancellationToken).ConfigureAwait(false);

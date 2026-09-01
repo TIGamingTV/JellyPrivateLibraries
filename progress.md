@@ -2,6 +2,33 @@
 
 A running history of changes to JellyPrivateLibraries.
 
+## 2026-09-01 — Fix Jellyseerr grants being silently swallowed (regression from 1.0.0.9)
+
+**Regression introduced by the previous change.** `AddSeerrGrantAsync` dedupes an incoming
+webhook against any existing grant with the same `UserId` + `ProviderName` + `ProviderId`
+and `return`s early if one is found. Before 1.0.0.9 manual grants stored *empty* provider
+ids, so they could never satisfy that check. The SchemaVersion 2 backfill gave every
+existing manual grant a real Tmdb/Tvdb id, so a Jellyseerr request for an
+already-manually-granted title now matched the dedup, returned without creating a grant,
+and — because `RestrictionController.Webhook` logs "Granted" and returns 200
+unconditionally — reported success to Jellyseerr. Symptom: webhook OK, no grant written,
+nothing ever tagged.
+
+- `AddSeerrGrantAsync` no longer returns early on a collision. It reuses the existing entry
+  and still calls `ApplyGrantAsync`, so the tag is asserted even when the earlier grant was
+  never applied or its item has since been replaced. The webhook is therefore idempotent
+  and can also repair a grant rather than being a no-op.
+- Added an info log per webhook grant (`created` vs `already existed, re-applying`) with the
+  user and provider id — the previous silent path was undiagnosable from the logs.
+- `RestrictionController.Webhook` now logs ignored notification types, so a mis-templated
+  Jellyseerr payload is visible instead of silently returning 200.
+
+Also bumped `csproj` (`AssemblyVersion`/`FileVersion`/`Version`) and `build.yaml` from
+1.0.0.5 to 1.0.0.10, closing the drift `CLAUDE.md` flags (`manifest.json` was already at
+1.0.0.9 because releases are tag-driven).
+
+Verified with a clean `dotnet build -c Release` (0 warnings, 0 errors).
+
 ## 2026-09-01 — Grants follow a title when its file is replaced by a better copy
 
 **Problem.** A manually granted title was pinned to `GrantEntry.ItemId` only. When the
