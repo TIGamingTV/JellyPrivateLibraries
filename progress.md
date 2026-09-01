@@ -2,6 +2,42 @@
 
 A running history of changes to JellyPrivateLibraries.
 
+## 2026-09-01 — Grants follow a title when its file is replaced by a better copy
+
+**Problem.** A manually granted title was pinned to `GrantEntry.ItemId` only. When the
+underlying file was upgraded (1080p → 4K) Jellyfin re-imported it as a *new* library item
+with a new id, the grant's cached id went dangling, and the user had to pick the title
+again in the widget. Jellyseerr grants were unaffected because they also carry an external
+provider id.
+
+Fixed in `Services/RestrictionManager.cs`:
+
+- **`AddManualGrantAsync`** now records the item's external provider id alongside the
+  internal id, using the same priority as Seerr grants (`Tmdb` → `Tvdb` → `Imdb`, via the
+  new `PickProviderId` helper). Logs a warning when the item has none (e.g. home videos) —
+  such a grant still can't survive a replacement.
+- **`ResolveGrantItems`** no longer returns empty when the cached `ItemId` is dangling; it
+  falls through to the provider-id lookup. Without this the stored provider id would never
+  have been consulted for manual grants, so this is the change that actually fixes the bug.
+- **`ApplyGrantAsync`** re-points `grant.ItemId` at the resolved item whenever the cached id
+  isn't among the resolved items, instead of only filling it in when it was empty. This is
+  what persists the re-binding after an upgrade.
+- **`OnItemAddedAsync`** matches grants on the provider id regardless of whether the grant
+  already has an item id cached (previously it required `ItemId == Guid.Empty`), so the
+  replacement is tagged the moment it is imported rather than up to 30 minutes later on the
+  next reconcile. It only overwrites `grant.ItemId` when the old item is genuinely gone, so
+  keeping both copies in the library leaves both tagged.
+- **`RemoveGrantAsync`** also matches by provider id, because the widget revokes using the
+  *current* item id while a not-yet-reconciled grant may still hold the pre-upgrade id —
+  otherwise un-selecting a re-imported title would silently no-op.
+- **Schema version 2 migration** in `ReconcileAllAsync` backfills provider ids onto existing
+  grants that predate this change (only where the item still resolves), so already-granted
+  titles are protected too rather than needing one more manual re-selection.
+
+Verified with a clean `dotnet build -c Release` (0 warnings, 0 errors). Not yet exercised
+against a live server; end-to-end check is to grant a title, replace its file with a
+differently-named better copy, rescan, and confirm the title stays in the user's library.
+
 ## 2026-08-09 — Inject via the File Transformation plugin, direct patch as fallback
 
 `Services/ScriptInjector.cs` previously always wrote the widget `<script>` tag straight
