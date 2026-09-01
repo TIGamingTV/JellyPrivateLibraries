@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
@@ -355,17 +357,29 @@ public class RestrictionController : ControllerBase
             return Ok(new { message = "Ignored notification type " + type });
         }
 
-        var username = payload.Request?.Username;
+        // Accept both the plugin's documented template field ("username") and the field
+        // Jellyseerr's *default* JSON template emits ("requestedBy_username"). Requiring only
+        // the former meant an otherwise-working default template silently produced no grants.
+        var username = FirstNonBlank(payload.Request?.Username, payload.Request?.RequestedByUsername);
+        var email = FirstNonBlank(payload.Request?.Email, payload.Request?.RequestedByEmail);
+
         if (string.IsNullOrWhiteSpace(username))
         {
-            _logger.LogWarning("Jellyseerr webhook missing requester username; ignoring");
+            _logger.LogWarning(
+                "Jellyseerr webhook for {Type} carried no requester username (checked "
+                + "request.username and request.requestedBy_username; requester email was "
+                + "'{Email}'). Check the webhook JSON payload template.",
+                type,
+                email);
             return Ok(new { message = "No requester" });
         }
 
         var user = _userManager.GetUserByName(username);
         if (user is null)
         {
-            _logger.LogWarning("Jellyseerr requester '{User}' has no matching Jellyfin user; ignoring", username);
+            _logger.LogWarning(
+                "Jellyseerr requester '{User}' has no matching Jellyfin user; ignoring",
+                username);
             return Ok(new { message = "No matching Jellyfin user" });
         }
 
@@ -387,11 +401,23 @@ public class RestrictionController : ControllerBase
 
         if (!granted)
         {
+            _logger.LogWarning(
+                "Jellyseerr webhook for user '{User}' had no usable provider id "
+                + "(media.tmdbId and media.tvdbId were both empty); nothing granted",
+                username);
             return Ok(new { message = "No usable provider id in payload" });
         }
 
         _logger.LogInformation("Granted Jellyseerr request to user {User} (tmdb={Tmdb}, tvdb={Tvdb})", username, tmdb, tvdb);
         return Ok(new { message = "Granted" });
+    }
+
+    /// <summary>
+    /// Returns the first value that is neither null nor blank, or null when there is none.
+    /// </summary>
+    private static string? FirstNonBlank(params string?[] values)
+    {
+        return values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
     }
 
     private async Task<Guid> GetUserIdAsync()
@@ -488,22 +514,70 @@ public class RestrictionController : ControllerBase
 
         /// <summary>Gets or sets the TMDB id.</summary>
         [JsonPropertyName("tmdbId")]
+        [JsonConverter(typeof(FlexibleStringConverter))]
         public string? TmdbId { get; set; }
 
         /// <summary>Gets or sets the TVDB id.</summary>
         [JsonPropertyName("tvdbId")]
+        [JsonConverter(typeof(FlexibleStringConverter))]
         public string? TvdbId { get; set; }
+    }
+
+    /// <summary>
+    /// Reads a JSON string *or* number into a string. Jellyseerr's payload template quotes
+    /// the provider ids, but a hand-edited template can emit them unquoted, which would
+    /// otherwise fail model binding and reject the whole webhook with a 400.
+    /// </summary>
+    private sealed class FlexibleStringConverter : JsonConverter<string?>
+    {
+        /// <inheritdoc />
+        public override string? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            switch (reader.TokenType)
+            {
+                case JsonTokenType.String:
+                    return reader.GetString();
+                case JsonTokenType.Number:
+                    return reader.TryGetInt64(out var number)
+                        ? number.ToString(CultureInfo.InvariantCulture)
+                        : reader.GetDouble().ToString(CultureInfo.InvariantCulture);
+                case JsonTokenType.Null:
+                    return null;
+                default:
+                    reader.Skip();
+                    return null;
+            }
+        }
+
+        /// <inheritdoc />
+        public override void Write(Utf8JsonWriter writer, string? value, JsonSerializerOptions options)
+        {
+            writer.WriteStringValue(value);
+        }
     }
 
     /// <summary>Request block of the webhook payload.</summary>
     public class WebhookRequest
     {
-        /// <summary>Gets or sets the requester username.</summary>
+        /// <summary>Gets or sets the requester username (plugin's documented template).</summary>
         [JsonPropertyName("username")]
         public string? Username { get; set; }
 
-        /// <summary>Gets or sets the requester email.</summary>
+        /// <summary>Gets or sets the requester email (plugin's documented template).</summary>
         [JsonPropertyName("email")]
         public string? Email { get; set; }
+
+        /// <summary>
+        /// Gets or sets the requester username as emitted by Jellyseerr's *default* JSON
+        /// payload template. Accepted so the default template works without editing.
+        /// </summary>
+        [JsonPropertyName("requestedBy_username")]
+        public string? RequestedByUsername { get; set; }
+
+        /// <summary>
+        /// Gets or sets the requester email as emitted by Jellyseerr's default JSON template.
+        /// </summary>
+        [JsonPropertyName("requestedBy_email")]
+        public string? RequestedByEmail { get; set; }
     }
 }

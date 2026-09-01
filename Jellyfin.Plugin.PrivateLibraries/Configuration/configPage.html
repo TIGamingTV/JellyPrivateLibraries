@@ -75,6 +75,15 @@
     "email": "{{requestedBy_email}}"
   }
 }</pre>
+                    <p class="fieldDescription">
+                        Jellyseerr's default payload template also works — just add the
+                        <code>secret</code> field to it. The webhook accepts the requester as
+                        either <code>request.username</code> or
+                        <code>request.requestedBy_username</code>. Enable the
+                        <strong>Request Approved</strong>, <strong>Request Automatically
+                        Approved</strong> and <strong>Media Available</strong> notification
+                        types. If nothing is granted, the Jellyfin log states the reason.
+                    </p>
                 </div>
 
                 <div>

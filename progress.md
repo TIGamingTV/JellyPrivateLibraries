@@ -29,6 +29,28 @@ Also bumped `csproj` (`AssemblyVersion`/`FileVersion`/`Version`) and `build.yaml
 
 Verified with a clean `dotnet build -c Release` (0 warnings, 0 errors).
 
+### Webhook accepts Jellyseerr's default payload template
+
+Separate from the dedup regression: titles that were *never* manually granted produced no
+grants either. `Webhook` read the requester only from `request.username`, which is the
+plugin's own documented template. Jellyseerr's **default** template emits
+`request.requestedBy_username`, so with the default template the handler fell into the
+"No requester" branch — which logs a bare warning and returns **200 OK**, so Jellyseerr
+reported success while nothing was ever granted.
+
+- `WebhookRequest` now also binds `requestedBy_username` / `requestedBy_email`, and the
+  handler takes the first non-blank of the two username fields.
+- `media.tmdbId` / `media.tvdbId` bind through a `FlexibleStringConverter` that accepts a
+  JSON string *or* number, so a hand-edited template with unquoted ids no longer 400s the
+  whole request.
+- Every non-granting branch now logs why (ignored notification type, missing requester field,
+  unmatched username, both provider ids empty). These paths were previously either silent or
+  logged without enough detail to tell them apart.
+- The email fallback for user matching was considered and dropped: Jellyfin's `User` has no
+  email to match against, so username remains the only usable key.
+- README and `configPage.html` now state that the default template works once the `secret`
+  field is added, and that the log names the reason when nothing is granted.
+
 ## 2026-09-01 — Grants follow a title when its file is replaced by a better copy
 
 **Problem.** A manually granted title was pinned to `GrantEntry.ItemId` only. When the
