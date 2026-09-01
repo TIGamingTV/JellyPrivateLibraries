@@ -91,7 +91,16 @@ In **Jellyseerr → Settings → Notifications → Webhook**:
 }
 ```
 
+Jellyseerr's **default** JSON payload template also works, as long as you add the `secret`
+field to it — the webhook reads the requester from either `request.username` (above) or
+`request.requestedBy_username` (the default template's field name), and accepts the provider
+ids quoted or unquoted.
+
 Enable the **Request Approved**, **Request Automatically Approved**, and **Media Available** notification types. The requester is matched to a Jellyfin user by **username** (this matches automatically for Jellyfin-authenticated Jellyseerr accounts).
+
+If nothing is granted, the Jellyfin log says why — it names the notification type it ignored,
+whether the requester field was missing, whether the username matched no Jellyfin user, and
+whether both provider ids were empty.
 
 ## Caveats
 
