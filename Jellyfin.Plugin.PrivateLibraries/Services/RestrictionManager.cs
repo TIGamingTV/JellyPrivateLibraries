@@ -20,6 +20,7 @@ namespace Jellyfin.Plugin.PrivateLibraries.Services;
 public class RestrictionManager
 {
     private static readonly BaseItemKind[] _grantableKinds = { BaseItemKind.Movie, BaseItemKind.Series };
+    private static readonly string[] _providerPriority = { "Tmdb", "Tvdb", "Imdb" };
     private readonly ILibraryManager _libraryManager;
     private readonly IUserManager _userManager;
     private readonly ILogger<RestrictionManager> _logger;
@@ -65,6 +66,29 @@ public class RestrictionManager
 
     private static string TagPrefix =>
         string.IsNullOrWhiteSpace(Config.TagPrefix) ? "jpl" : Config.TagPrefix.Trim();
+
+    /// <summary>
+    /// Picks the most useful external provider id from an item, in the same priority order
+    /// Jellyseerr grants use (Tmdb, then Tvdb, then Imdb). Returns empty strings when the
+    /// item carries none of them (e.g. home videos).
+    /// </summary>
+    private static (string ProviderName, string ProviderId) PickProviderId(BaseItem item)
+    {
+        if (item.ProviderIds is null)
+        {
+            return (string.Empty, string.Empty);
+        }
+
+        foreach (var name in _providerPriority)
+        {
+            if (item.ProviderIds.TryGetValue(name, out var value) && !string.IsNullOrWhiteSpace(value))
+            {
+                return (name, value);
+            }
+        }
+
+        return (string.Empty, string.Empty);
+    }
 
     /// <summary>
     /// Ensures a configuration entry exists for the given user, creating one if needed.
@@ -361,6 +385,24 @@ public class RestrictionManager
     /// <returns>True if the grant was added.</returns>
     public async Task<bool> AddManualGrantAsync(Guid userId, Guid itemId, CancellationToken cancellationToken)
     {
+        var item = _libraryManager.GetItemById(itemId);
+        if (item is null)
+        {
+            return false;
+        }
+
+        // Capture an external provider id alongside the internal item id. When the file is
+        // later upgraded (1080p -> 4K) Jellyfin re-imports it under a brand new item id and
+        // the cached ItemId goes stale; the provider id is what lets the grant re-resolve
+        // itself automatically instead of the user having to pick the title again.
+        var (providerName, providerId) = PickProviderId(item);
+        if (string.IsNullOrEmpty(providerName))
+        {
+            _logger.LogWarning(
+                "Manual grant for item {Item} has no Tmdb/Tvdb/Imdb id; it cannot survive a file replacement",
+                item.Name);
+        }
+
         GrantEntry grant;
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -372,7 +414,14 @@ public class RestrictionManager
                 return false;
             }
 
-            grant = new GrantEntry { UserId = userId, ItemId = itemId, Source = "Manual" };
+            grant = new GrantEntry
+            {
+                UserId = userId,
+                ItemId = itemId,
+                ProviderName = providerName,
+                ProviderId = providerId,
+                Source = "Manual"
+            };
             Config.Grants.Add(grant);
             Plugin.Instance!.SaveConfiguration();
         }
@@ -437,10 +486,26 @@ public class RestrictionManager
     /// <returns>A task.</returns>
     public async Task RemoveGrantAsync(Guid userId, Guid itemId, CancellationToken cancellationToken)
     {
+        var item = _libraryManager.GetItemById(itemId);
+
+        // The caller passes the id of the item as it exists *now*. A grant created before the
+        // file was replaced still carries the old id, so also match on the item's provider id;
+        // otherwise revoking a re-imported title would silently do nothing.
+        var providerName = string.Empty;
+        var providerId = string.Empty;
+        if (item is not null)
+        {
+            (providerName, providerId) = PickProviderId(item);
+        }
+
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            Config.Grants.RemoveAll(g => g.UserId == userId && g.ItemId == itemId);
+            Config.Grants.RemoveAll(g => g.UserId == userId
+                && (g.ItemId == itemId
+                    || (!string.IsNullOrEmpty(providerName)
+                        && string.Equals(g.ProviderName, providerName, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(g.ProviderId, providerId, StringComparison.OrdinalIgnoreCase))));
             Plugin.Instance!.SaveConfiguration();
         }
         finally
@@ -448,7 +513,6 @@ public class RestrictionManager
             _lock.Release();
         }
 
-        var item = _libraryManager.GetItemById(itemId);
         if (item is not null)
         {
             var tag = Config.Users.FirstOrDefault(u => u.UserId == userId)?.PersonalTag ?? BuildPersonalTag(userId);
@@ -486,7 +550,14 @@ public class RestrictionManager
         if (grant.ItemId != Guid.Empty)
         {
             var byId = _libraryManager.GetItemById(grant.ItemId);
-            return byId is null ? Array.Empty<BaseItem>() : new[] { byId };
+            if (byId is not null)
+            {
+                return new[] { byId };
+            }
+
+            // The cached item id no longer exists — typically the file was replaced with a
+            // better copy and Jellyfin re-imported it under a new id. Fall through to the
+            // provider-id lookup so the grant re-binds itself to the replacement.
         }
 
         if (!string.IsNullOrEmpty(grant.ProviderName) && !string.IsNullOrEmpty(grant.ProviderId))
@@ -519,25 +590,29 @@ public class RestrictionManager
                   ?? BuildPersonalTag(grant.UserId);
 
         var applied = false;
-        foreach (var item in ResolveGrantItems(grant))
+        var resolved = ResolveGrantItems(grant);
+        foreach (var item in resolved)
         {
             if (await AddTagToItemAsync(item, tag, cancellationToken).ConfigureAwait(false))
             {
                 applied = true;
             }
+        }
 
-            // Cache the resolved item id back on Seerr grants for faster future reconciles.
-            if (grant.ItemId == Guid.Empty)
-            {
-                grant.ItemId = item.Id;
-            }
+        // Cache the resolved item id for faster future reconciles. This also re-points a
+        // grant whose cached id went stale because the item was replaced by an upgraded file.
+        if (resolved.Count > 0 && resolved.All(i => i.Id != grant.ItemId))
+        {
+            grant.ItemId = resolved[0].Id;
         }
 
         return applied;
     }
 
     /// <summary>
-    /// Handles a freshly-added library item by applying any pending grants that match it.
+    /// Handles a freshly-added library item by applying any grant whose provider id matches
+    /// it — both still-pending Jellyseerr grants and grants whose item was just replaced by
+    /// an upgraded file.
     /// </summary>
     /// <param name="item">The newly added item.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
@@ -557,8 +632,12 @@ public class RestrictionManager
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            // Match on the provider id regardless of whether the grant already has an item id
+            // cached: a grant whose file was replaced by a better copy points at the old,
+            // now-deleted item, and this newly imported item is its replacement. Re-tagging it
+            // here is what makes the grant follow the upgrade without the user re-selecting it.
             matching = Config.Grants.Where(g =>
-                g.ItemId == Guid.Empty
+                g.ItemId != item.Id
                 && !string.IsNullOrEmpty(g.ProviderName)
                 && item.ProviderIds.TryGetValue(g.ProviderName, out var value)
                 && string.Equals(value, g.ProviderId, StringComparison.OrdinalIgnoreCase))
@@ -579,7 +658,7 @@ public class RestrictionManager
             var tag = Config.Users.FirstOrDefault(u => u.UserId == grant.UserId)?.PersonalTag
                       ?? BuildPersonalTag(grant.UserId);
             await AddTagToItemAsync(item, tag, cancellationToken).ConfigureAwait(false);
-            _logger.LogInformation("Applied pending grant for user {UserId} to newly added item {Item}", grant.UserId, item.Name);
+            _logger.LogInformation("Applied grant for user {UserId} to newly added item {Item}", grant.UserId, item.Name);
         }
 
         // Cache the resolved item id and persist under the lock so we don't collide with a
@@ -589,7 +668,13 @@ public class RestrictionManager
         {
             foreach (var grant in matching)
             {
-                grant.ItemId = item.Id;
+                // Only re-point the grant when its old item is gone (pending grant, or the
+                // item really was replaced). If the old item still exists both copies are in
+                // the library and both stay tagged, so leave the cached id alone.
+                if (grant.ItemId == Guid.Empty || _libraryManager.GetItemById(grant.ItemId) is null)
+                {
+                    grant.ItemId = item.Id;
+                }
             }
 
             Plugin.Instance!.SaveConfiguration();
@@ -625,6 +710,41 @@ public class RestrictionManager
 
                 Config.SchemaVersion = 1;
                 Plugin.Instance!.SaveConfiguration();
+            }
+
+            // Backfill provider ids onto manual grants created before they were recorded, so
+            // those grants also survive the item being replaced by an upgraded file. Only
+            // grants whose item still exists can be backfilled; the rest stay as-is.
+            if (Config.SchemaVersion < 2)
+            {
+                var backfilled = 0;
+                foreach (var grant in Config.Grants)
+                {
+                    if (grant.ItemId == Guid.Empty || !string.IsNullOrEmpty(grant.ProviderName))
+                    {
+                        continue;
+                    }
+
+                    var item = _libraryManager.GetItemById(grant.ItemId);
+                    if (item is null)
+                    {
+                        continue;
+                    }
+
+                    var (providerName, providerId) = PickProviderId(item);
+                    if (string.IsNullOrEmpty(providerName))
+                    {
+                        continue;
+                    }
+
+                    grant.ProviderName = providerName;
+                    grant.ProviderId = providerId;
+                    backfilled++;
+                }
+
+                Config.SchemaVersion = 2;
+                Plugin.Instance!.SaveConfiguration();
+                _logger.LogInformation("Backfilled provider ids onto {Count} existing grant(s)", backfilled);
             }
 
             // Mandatory mode only: auto-enroll every user so they are restricted by default.
