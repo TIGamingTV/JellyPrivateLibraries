@@ -395,8 +395,11 @@ public class RestrictionManager
         // later upgraded (1080p -> 4K) Jellyfin re-imports it under a brand new item id and
         // the cached ItemId goes stale; the provider id is what lets the grant re-resolve
         // itself automatically instead of the user having to pick the title again.
-        var (providerName, providerId) = PickProviderId(item);
-        if (string.IsNullOrEmpty(providerName))
+        // It goes in the Match* fields, NOT ProviderName/ProviderId: those identify a
+        // Jellyseerr request, and writing them here made manual grants collide with the
+        // webhook's dedup and pending-grant resolution.
+        var (matchName, matchId) = PickProviderId(item);
+        if (string.IsNullOrEmpty(matchName))
         {
             _logger.LogWarning(
                 "Manual grant for item {Item} has no Tmdb/Tvdb/Imdb id; it cannot survive a file replacement",
@@ -418,8 +421,8 @@ public class RestrictionManager
             {
                 UserId = userId,
                 ItemId = itemId,
-                ProviderName = providerName,
-                ProviderId = providerId,
+                MatchProviderName = matchName,
+                MatchProviderId = matchId,
                 Source = "Manual"
             };
             Config.Grants.Add(grant);
@@ -508,11 +511,11 @@ public class RestrictionManager
         // The caller passes the id of the item as it exists *now*. A grant created before the
         // file was replaced still carries the old id, so also match on the item's provider id;
         // otherwise revoking a re-imported title would silently do nothing.
-        var providerName = string.Empty;
-        var providerId = string.Empty;
+        var matchName = string.Empty;
+        var matchId = string.Empty;
         if (item is not null)
         {
-            (providerName, providerId) = PickProviderId(item);
+            (matchName, matchId) = PickProviderId(item);
         }
 
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -520,9 +523,9 @@ public class RestrictionManager
         {
             Config.Grants.RemoveAll(g => g.UserId == userId
                 && (g.ItemId == itemId
-                    || (!string.IsNullOrEmpty(providerName)
-                        && string.Equals(g.ProviderName, providerName, StringComparison.OrdinalIgnoreCase)
-                        && string.Equals(g.ProviderId, providerId, StringComparison.OrdinalIgnoreCase))));
+                    || (!string.IsNullOrEmpty(matchName)
+                        && string.Equals(g.MatchProviderName, matchName, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(g.MatchProviderId, matchId, StringComparison.OrdinalIgnoreCase))));
             Plugin.Instance!.SaveConfiguration();
         }
         finally
@@ -574,10 +577,11 @@ public class RestrictionManager
 
             // The cached item id no longer exists — typically the file was replaced with a
             // better copy and Jellyfin re-imported it under a new id. Fall through to the
-            // provider-id lookup so the grant re-binds itself to the replacement.
+            // lookup below so the grant re-binds itself to the replacement.
         }
 
-        if (!string.IsNullOrEmpty(grant.ProviderName) && !string.IsNullOrEmpty(grant.ProviderId))
+        var (name, id) = GetLookupKey(grant);
+        if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(id))
         {
             var query = new InternalItemsQuery
             {
@@ -586,13 +590,28 @@ public class RestrictionManager
                 IsVirtualItem = false,
                 HasAnyProviderId = new Dictionary<string, string>
                 {
-                    [grant.ProviderName] = grant.ProviderId
+                    [name] = id
                 }
             };
             return _libraryManager.GetItemList(query);
         }
 
         return Array.Empty<BaseItem>();
+    }
+
+    /// <summary>
+    /// The provider key used to look an item up. For a Seerr grant this is the request's own
+    /// provider id (unchanged behaviour); for a manual grant it is the separate Match* key
+    /// recorded so the grant can follow a file replacement.
+    /// </summary>
+    private static (string Name, string Id) GetLookupKey(GrantEntry grant)
+    {
+        if (!string.IsNullOrEmpty(grant.ProviderName) && !string.IsNullOrEmpty(grant.ProviderId))
+        {
+            return (grant.ProviderName, grant.ProviderId);
+        }
+
+        return (grant.MatchProviderName, grant.MatchProviderId);
     }
 
     /// <summary>
@@ -616,9 +635,11 @@ public class RestrictionManager
             }
         }
 
-        // Cache the resolved item id for faster future reconciles. This also re-points a
-        // grant whose cached id went stale because the item was replaced by an upgraded file.
-        if (resolved.Count > 0 && resolved.All(i => i.Id != grant.ItemId))
+        // Cache the resolved item id for faster future reconciles (original behaviour), and
+        // additionally re-point a grant whose cached id is dangling because its item was
+        // replaced by an upgraded file. A grant whose cached id still resolves is left alone.
+        if (resolved.Count > 0
+            && (grant.ItemId == Guid.Empty || _libraryManager.GetItemById(grant.ItemId) is null))
         {
             grant.ItemId = resolved[0].Id;
         }
@@ -649,16 +670,31 @@ public class RestrictionManager
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            // Match on the provider id regardless of whether the grant already has an item id
-            // cached: a grant whose file was replaced by a better copy points at the old,
-            // now-deleted item, and this newly imported item is its replacement. Re-tagging it
-            // here is what makes the grant follow the upgrade without the user re-selecting it.
             matching = Config.Grants.Where(g =>
-                g.ItemId != item.Id
-                && !string.IsNullOrEmpty(g.ProviderName)
-                && item.ProviderIds.TryGetValue(g.ProviderName, out var value)
-                && string.Equals(value, g.ProviderId, StringComparison.OrdinalIgnoreCase))
-                .ToList();
+            {
+                var (name, id) = GetLookupKey(g);
+                if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(id))
+                {
+                    return false;
+                }
+
+                if (!item.ProviderIds.TryGetValue(name, out var value)
+                    || !string.Equals(value, id, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                // Original behaviour: a still-pending grant (Jellyseerr request whose media
+                // has just been imported). Untouched so the Seerr flow is exactly as before.
+                if (g.ItemId == Guid.Empty)
+                {
+                    return true;
+                }
+
+                // Added case: the grant's item is gone and this import is its replacement,
+                // so the grant should follow the upgrade instead of being orphaned.
+                return g.ItemId != item.Id && _libraryManager.GetItemById(g.ItemId) is null;
+            }).ToList();
         }
         finally
         {
@@ -729,15 +765,37 @@ public class RestrictionManager
                 Plugin.Instance!.SaveConfiguration();
             }
 
-            // Backfill provider ids onto manual grants created before they were recorded, so
-            // those grants also survive the item being replaced by an upgraded file. Only
-            // grants whose item still exists can be backfilled; the rest stay as-is.
-            if (Config.SchemaVersion < 2)
+            // Schema 3 does two things:
+            //  * Repairs the damage done by 1.0.0.9's schema-2 migration, which wrote the
+            //    re-resolution provider id into ProviderName/ProviderId on *manual* grants.
+            //    Those fields identify a Jellyseerr request, so manual grants started
+            //    colliding with webhook dedup and pending-grant resolution and Seerr stopped
+            //    granting anything. The value is moved to the Match* fields it should have
+            //    used, and the Seerr fields are cleared.
+            //  * Backfills the Match* key for manual grants that never had one, so they too
+            //    survive their file being replaced.
+            if (Config.SchemaVersion < 3)
             {
+                var repaired = 0;
                 var backfilled = 0;
                 foreach (var grant in Config.Grants)
                 {
-                    if (grant.ItemId == Guid.Empty || !string.IsNullOrEmpty(grant.ProviderName))
+                    var isSeerr = string.Equals(grant.Source, "Seerr", StringComparison.OrdinalIgnoreCase);
+
+                    if (!isSeerr && !string.IsNullOrEmpty(grant.ProviderName))
+                    {
+                        if (string.IsNullOrEmpty(grant.MatchProviderName))
+                        {
+                            grant.MatchProviderName = grant.ProviderName;
+                            grant.MatchProviderId = grant.ProviderId;
+                        }
+
+                        grant.ProviderName = string.Empty;
+                        grant.ProviderId = string.Empty;
+                        repaired++;
+                    }
+
+                    if (isSeerr || !string.IsNullOrEmpty(grant.MatchProviderName) || grant.ItemId == Guid.Empty)
                     {
                         continue;
                     }
@@ -748,20 +806,24 @@ public class RestrictionManager
                         continue;
                     }
 
-                    var (providerName, providerId) = PickProviderId(item);
-                    if (string.IsNullOrEmpty(providerName))
+                    var (matchName, matchId) = PickProviderId(item);
+                    if (string.IsNullOrEmpty(matchName))
                     {
                         continue;
                     }
 
-                    grant.ProviderName = providerName;
-                    grant.ProviderId = providerId;
+                    grant.MatchProviderName = matchName;
+                    grant.MatchProviderId = matchId;
                     backfilled++;
                 }
 
-                Config.SchemaVersion = 2;
+                Config.SchemaVersion = 3;
                 Plugin.Instance!.SaveConfiguration();
-                _logger.LogInformation("Backfilled provider ids onto {Count} existing grant(s)", backfilled);
+                _logger.LogInformation(
+                    "Grant schema v3: repaired {Repaired} manual grant(s) that had been given "
+                    + "Jellyseerr provider ids, backfilled match ids onto {Backfilled}",
+                    repaired,
+                    backfilled);
             }
 
             // Mandatory mode only: auto-enroll every user so they are restricted by default.

@@ -114,13 +114,32 @@ public class GrantEntry
 
     /// <summary>
     /// Gets or sets the external provider name (Tmdb, Tvdb, Imdb) for Seerr grants.
+    /// This is the Jellyseerr request's *identity*: it is what the webhook dedupes on and
+    /// what a still-pending grant is resolved by. Only Seerr grants ever set it — a manual
+    /// grant that populated this would be indistinguishable from a Seerr request.
     /// </summary>
     public string ProviderName { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets the external provider id value for Seerr grants.
+    /// Gets or sets the external provider id value for Seerr grants. See
+    /// <see cref="ProviderName"/> for why manual grants must not set this.
     /// </summary>
     public string ProviderId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the provider name used purely to *re-find* this grant's item if its
+    /// <see cref="ItemId"/> goes stale (the file was replaced by an upgraded copy and
+    /// Jellyfin re-imported it under a new id). Deliberately separate from
+    /// <see cref="ProviderName"/> so recording it on a manual grant cannot affect
+    /// Jellyseerr dedup or pending-request resolution.
+    /// </summary>
+    public string MatchProviderName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the provider id used purely to re-find this grant's item. See
+    /// <see cref="MatchProviderName"/>.
+    /// </summary>
+    public string MatchProviderId { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets where the grant came from (Manual or Seerr).
