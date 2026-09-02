@@ -2,6 +2,86 @@
 
 A running history of changes to JellyPrivateLibraries.
 
+## 2026-09-02 — Sync existing Jellyseerr requests over the API (v1.2.0.0)
+
+The Jellyseerr integration was inbound-webhook-only, and a webhook by definition only ever
+reports activity that happens *after* it is configured. Every request made before the plugin
+was installed was therefore invisible: a user who turned restriction on immediately lost
+access to their entire request history and had to re-add each title by hand from the widget.
+`progress.md` had this listed as a known gap since v1.0.0.2 ("existing-media handling: manual
+widget only, no Jellyseerr API backfill").
+
+Added an outbound read path that walks Jellyseerr's REST API and creates the same grants the
+webhook would have created.
+
+**New pieces**
+
+- `Services/JellyseerrClient.cs` — minimal read-only client. `GET /api/v1/status` for the
+  connection test and paged `GET /api/v1/request?take=100&skip=N&filter=all&sort=added`,
+  authenticated with the `X-Api-Key` header. BCL only (`HttpClient` + `System.Text.Json`,
+  `IHttpClientFactory` with `NamedClient.Default`): the release workflow packages a single
+  DLL with no dependency-copying step, so a NuGet HTTP/JSON library would break every
+  release. HTTP 401/403 and 404 are translated into messages that name the fix rather than
+  surfacing a bare status code.
+- `Services/JellyseerrModels.cs` — API DTOs plus `JellyseerrRequestStatus`, mirroring
+  Jellyseerr's `server/constants/media.ts` (PENDING 1, APPROVED 2, DECLINED 3, FAILED 4,
+  COMPLETED 5).
+- `Services/JellyseerrSyncService.cs` — maps requesters to Jellyfin users and builds the
+  grant list. Guarded by its own semaphore so a scheduled run and the config page's button
+  cannot race each other's read-modify-write of the configuration.
+- `ScheduledTasks/JellyseerrSyncTask.cs` — 12-hour interval trigger. Deliberately **no**
+  startup trigger: a first sync against a mature Jellyseerr instance can touch a lot of
+  library items and startup is already busy with the reconcile task.
+- `RestrictionManager.AddSeerrGrantsAsync` — bulk sibling of `AddSeerrGrantAsync`. The
+  per-grant method saves the configuration inside the lock on *every* call, which is right
+  for a webhook delivering one request but would mean hundreds of config writes when
+  backfilling. This creates all missing entries under one lock/save, then applies only the
+  **new** ones outside the lock — grants that already existed are by definition already
+  covered by `ReconcileAllAsync`, which re-applies every grant each 30-minute pass.
+- Admin-only `POST /PrivateLibraries/Jellyseerr/Test` and `POST /PrivateLibraries/Jellyseerr/Sync`,
+  plus an API key field, two checkboxes, last-sync status and the two buttons on the config
+  page. Both buttons save the form first, because the server reads the URL and key from the
+  *stored* configuration — testing or syncing with unsaved edits would silently use the old
+  values.
+
+**Decisions worth keeping**
+
+- Sync grants set `ProviderName`/`ProviderId` and `Source = "Seerr"` — the same fields the
+  webhook uses as a request's identity, deliberately *not* the `Match*` re-resolution key.
+  This is the distinction the 1.0.0.9 → 1.1.2.0 breakage was about; getting it wrong here
+  would have made sync grants indistinguishable from manual ones and reopened that dedup
+  collision. Because the identity matches, the sync and the webhook dedupe against each
+  other: repeated syncs, or a sync after the webhook already granted a title, create nothing.
+- Only APPROVED and COMPLETED are granted, mirroring the webhook's MEDIA_APPROVED /
+  MEDIA_AUTO_APPROVED / MEDIA_AVAILABLE filter. DECLINED and FAILED never become watchable;
+  PENDING is opt-in behind a checkbox.
+- Requester → Jellyfin user resolution tries `jellyfinUserId` first (the only unambiguous
+  key, present when Jellyseerr authenticates against Jellyfin), then `jellyfinUsername`,
+  `username` and `displayName`, because a locally- or Plex-authenticated Jellyseerr has no
+  linked id at all. The webhook remains username-only — it has nothing else in its payload.
+  Unmatched accounts are aggregated and reported in both the API response and the log
+  instead of being silently dropped.
+- A TV request carrying both a TMDB and a TVDB id produces two grants, exactly as the
+  webhook does, because either provider id may be the one Jellyfin matched the series on.
+  Duplicate (user, provider id) pairs across a user's history are collapsed before they
+  reach the manager.
+- Paging stops on a short page, and also if a page yields no request ids that were not
+  already seen — a server that ignored `skip` would otherwise loop.
+
+**Verification.** No test project exists in the repo, so this was checked with a throwaway
+harness against the built DLL (39 checks): URL normalization (trailing slash, an admin who
+already appended `/api/v1`, sub-path installs, non-absolute and non-http rejected) and
+deserialization of a realistic `GET /api/v1/request` body — numeric and quoted provider ids,
+null `tvdbId`, absent `media`, absent `pageInfo`, null `requestedBy`. Then 16 end-to-end
+checks against a stub Jellyseerr on `HttpListener` serving 247 requests: paging issued
+`skip=0,100,200` and stopped on the short page, the API key went out on every call, progress
+was monotonic to 100, and a wrong key / wrong base path produced the intended messages.
+`dotnet build -c Release` is clean with 0 warnings and the output directory still contains
+only the single plugin DLL.
+
+Version bumped to **1.2.0.0** in `csproj` and `build.yaml` together, per the release note
+below — this also clears the 1.0.0.10-vs-1.1.2.0 drift those files had accumulated.
+
 ## 2026-09-01 — Separate the "re-find this item" key from the Jellyseerr request key
 
 **Root cause of the 1.0.0.9 Jellyseerr breakage.** `GrantEntry.ProviderName`/`ProviderId`

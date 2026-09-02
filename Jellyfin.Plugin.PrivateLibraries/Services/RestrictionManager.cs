@@ -498,6 +498,127 @@ public class RestrictionManager
     }
 
     /// <summary>
+    /// Bulk equivalent of <see cref="AddSeerrGrantAsync"/> for the Jellyseerr backfill sync.
+    /// </summary>
+    /// <remarks>
+    /// The per-grant method saves the configuration inside the lock on every call, which is
+    /// fine for a webhook delivering one request but would mean hundreds of config writes when
+    /// backfilling a mature Jellyseerr instance. This creates all missing entries under a
+    /// single lock/save, then applies only the *new* ones outside the lock: grants that already
+    /// existed are, by definition, already covered by the periodic reconcile.
+    /// </remarks>
+    /// <param name="requests">The (user, provider id) pairs to grant.</param>
+    /// <param name="progress">Optional progress reporter over the 0-100 range.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>How many grants were created and how many already existed.</returns>
+    public async Task<(int Created, int AlreadyExisted)> AddSeerrGrantsAsync(
+        IReadOnlyCollection<SeerrGrantRequest> requests,
+        IProgress<double>? progress,
+        CancellationToken cancellationToken)
+    {
+        if (requests.Count == 0)
+        {
+            return (0, 0);
+        }
+
+        var created = new List<GrantEntry>();
+        var alreadyExisted = 0;
+
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            foreach (var request in requests)
+            {
+                if (string.IsNullOrEmpty(request.ProviderName) || string.IsNullOrEmpty(request.ProviderId))
+                {
+                    continue;
+                }
+
+                EnsureUserEntryLocked(request.UserId);
+                var existing = Config.Grants.FirstOrDefault(g =>
+                    g.UserId == request.UserId
+                    && string.Equals(g.ProviderName, request.ProviderName, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(g.ProviderId, request.ProviderId, StringComparison.OrdinalIgnoreCase));
+
+                if (existing is not null)
+                {
+                    alreadyExisted++;
+                    continue;
+                }
+
+                var grant = new GrantEntry
+                {
+                    UserId = request.UserId,
+                    ProviderName = request.ProviderName,
+                    ProviderId = request.ProviderId,
+                    Source = "Seerr"
+                };
+                Config.Grants.Add(grant);
+                created.Add(grant);
+            }
+
+            Plugin.Instance!.SaveConfiguration();
+        }
+        finally
+        {
+            _lock.Release();
+        }
+
+        _logger.LogInformation(
+            "Jellyseerr sync: {Created} grant(s) created, {Existing} already present",
+            created.Count,
+            alreadyExisted);
+
+        // Apply outside the lock — each one runs a library query and may write item metadata.
+        for (var i = 0; i < created.Count; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await ApplyGrantAsync(created[i], cancellationToken).ConfigureAwait(false);
+            progress?.Report((i + 1) * 100d / created.Count);
+        }
+
+        if (created.Count > 0)
+        {
+            // ApplyGrantAsync caches the resolved item id on the entry but does not persist;
+            // one save here keeps those ids instead of re-resolving on the next reconcile.
+            await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                Plugin.Instance!.SaveConfiguration();
+            }
+            finally
+            {
+                _lock.Release();
+            }
+        }
+
+        return (created.Count, alreadyExisted);
+    }
+
+    /// <summary>
+    /// Persists the plugin configuration under this manager's lock.
+    /// </summary>
+    /// <remarks>
+    /// Every save the plugin performs goes through the same lock so two of them cannot write
+    /// the configuration file at once. Callers outside this class that mutate configuration
+    /// fields directly should use this rather than calling <c>SaveConfiguration</c> themselves.
+    /// </remarks>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task.</returns>
+    public async Task SaveConfigurationAsync(CancellationToken cancellationToken)
+    {
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            Plugin.Instance!.SaveConfiguration();
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    /// <summary>
     /// Removes a manual grant for an item and untags it if no other grant needs it.
     /// </summary>
     /// <param name="userId">The user id.</param>
@@ -1009,4 +1130,27 @@ public class RestrictionManager
 
         item.LockedFields = locked.Where(f => f != MetadataField.Tags).ToArray();
     }
+}
+
+/// <summary>
+/// One (user, external provider id) pair to grant, as produced by the Jellyseerr sync.
+/// </summary>
+public class SeerrGrantRequest
+{
+    /// <summary>
+    /// Gets or sets the Jellyfin user id that the Jellyseerr requester was mapped to.
+    /// </summary>
+    public Guid UserId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the provider name (Tmdb or Tvdb). This becomes the grant's
+    /// <see cref="GrantEntry.ProviderName"/> — the Jellyseerr request identity — so a later
+    /// webhook for the same title dedupes against it instead of creating a duplicate.
+    /// </summary>
+    public string ProviderName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the provider id value.
+    /// </summary>
+    public string ProviderId { get; set; } = string.Empty;
 }
