@@ -14,6 +14,8 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
     public void RegisterServices(IServiceCollection serviceCollection, IServerApplicationHost applicationHost)
     {
         serviceCollection.AddSingleton<RestrictionManager>();
+        serviceCollection.AddSingleton<JellyseerrClient>();
+        serviceCollection.AddSingleton<JellyseerrSyncService>();
         serviceCollection.AddHostedService<ItemAddedListener>();
         serviceCollection.AddHostedService<ScriptInjector>();
     }

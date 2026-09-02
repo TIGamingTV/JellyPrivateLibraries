@@ -43,7 +43,10 @@
                 <div class="inputContainer">
                     <label class="inputLabel inputLabelUnfocused" for="JellyseerrUrl">Jellyseerr URL</label>
                     <input is="emby-input" type="text" id="JellyseerrUrl" name="JellyseerrUrl" placeholder="http://jellyseerr:5055" />
-                    <div class="fieldDescription">Informational only.</div>
+                    <div class="fieldDescription">
+                        Base URL of your Jellyseerr instance, as reachable from the Jellyfin server.
+                        Required for syncing existing requests; the webhook does not use it.
+                    </div>
                 </div>
 
                 <div class="inputContainer">
@@ -53,6 +56,60 @@
                         Paste this same value into the Jellyseerr webhook payload's <code>secret</code> field.
                         Leave empty to disable webhook processing.
                     </div>
+                </div>
+
+                <div class="verticalSection">
+                    <h3 class="sectionTitle">Sync existing requests</h3>
+                    <p class="fieldDescription">
+                        The webhook only ever reports <em>new</em> activity. Add an API key here and the
+                        plugin will also read the requests already in Jellyseerr — including everything
+                        requested before this plugin was installed — and grant them to the matching
+                        Jellyfin user. It runs every 12 hours (see Scheduled Tasks →
+                        <strong>Sync Jellyseerr requests</strong>) and on demand with the button below.
+                    </p>
+                </div>
+
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="JellyseerrApiKey">Jellyseerr API key</label>
+                    <input is="emby-input" type="password" id="JellyseerrApiKey" name="JellyseerrApiKey" autocomplete="off" />
+                    <div class="fieldDescription">
+                        From Jellyseerr → Settings → General → API Key. Leave empty to disable the sync
+                        and use the webhook only.
+                    </div>
+                </div>
+
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label class="emby-checkbox-label">
+                        <input is="emby-checkbox" type="checkbox" id="JellyseerrSyncEnabled" name="JellyseerrSyncEnabled" />
+                        <span>Run the Jellyseerr sync automatically</span>
+                    </label>
+                    <div class="fieldDescription checkboxFieldDescription">
+                        On (default): the scheduled task backfills grants every 12 hours. Off: only the
+                        "Sync now" button below runs it.
+                    </div>
+                </div>
+
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label class="emby-checkbox-label">
+                        <input is="emby-checkbox" type="checkbox" id="JellyseerrSyncIncludePending" name="JellyseerrSyncIncludePending" />
+                        <span>Also grant requests that are still awaiting approval</span>
+                    </label>
+                    <div class="fieldDescription checkboxFieldDescription">
+                        Off (default): only approved and completed requests are granted, matching what the
+                        webhook does. Declined and failed requests are never granted either way.
+                    </div>
+                </div>
+
+                <div id="jellyseerrSyncStatus" class="fieldDescription" style="margin-bottom:.5em;"></div>
+                <div id="jellyseerrSyncResult" class="fieldDescription" style="display:none;white-space:pre-wrap;"></div>
+
+                <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:1.5em;">
+                    <button is="emby-button" type="button" id="jellyseerrTestBtn" class="raised">
+                        <span>Save &amp; test connection</span>
+                    </button>
+                    <button is="emby-button" type="button" id="jellyseerrSyncBtn" class="raised button-submit">
+                        <span>Save &amp; sync now</span>
+                    </button>
                 </div>
 
                 <div class="verticalSection">
@@ -121,6 +178,22 @@
             pluginUniqueId: 'a3f1c6d2-9b4e-4c8a-bf2d-7e5a1c9d40e1'
         };
 
+        // Writes the form back into the plugin configuration. Returns a promise so the
+        // Jellyseerr buttons can save first — a sync reads the URL/key from the *saved*
+        // configuration, so syncing with unsaved edits would silently use the old values.
+        function savePrivateLibrariesConfig() {
+            return ApiClient.getPluginConfiguration(PrivateLibrariesConfig.pluginUniqueId).then(function (config) {
+                config.TagPrefix = document.querySelector('#TagPrefix').value || 'jpl';
+                config.RestrictNewUsersByDefault = document.querySelector('#RestrictNewUsersByDefault').checked;
+                config.JellyseerrUrl = document.querySelector('#JellyseerrUrl').value;
+                config.JellyseerrWebhookSecret = document.querySelector('#JellyseerrWebhookSecret').value;
+                config.JellyseerrApiKey = document.querySelector('#JellyseerrApiKey').value;
+                config.JellyseerrSyncEnabled = document.querySelector('#JellyseerrSyncEnabled').checked;
+                config.JellyseerrSyncIncludePending = document.querySelector('#JellyseerrSyncIncludePending').checked;
+                return ApiClient.updatePluginConfiguration(PrivateLibrariesConfig.pluginUniqueId, config);
+            });
+        }
+
         document.querySelector('#privateLibrariesConfigPage')
             .addEventListener('pageshow', function () {
                 Dashboard.showLoadingMsg();
@@ -129,6 +202,19 @@
                     document.querySelector('#RestrictNewUsersByDefault').checked = config.RestrictNewUsersByDefault === true;
                     document.querySelector('#JellyseerrUrl').value = config.JellyseerrUrl || '';
                     document.querySelector('#JellyseerrWebhookSecret').value = config.JellyseerrWebhookSecret || '';
+                    document.querySelector('#JellyseerrApiKey').value = config.JellyseerrApiKey || '';
+                    document.querySelector('#JellyseerrSyncEnabled').checked = config.JellyseerrSyncEnabled !== false;
+                    document.querySelector('#JellyseerrSyncIncludePending').checked = config.JellyseerrSyncIncludePending === true;
+
+                    var status = document.querySelector('#jellyseerrSyncStatus');
+                    if (config.JellyseerrLastSyncUtc) {
+                        var when = new Date(config.JellyseerrLastSyncUtc);
+                        status.textContent = 'Last sync: ' + (isNaN(when.getTime()) ? config.JellyseerrLastSyncUtc : when.toLocaleString())
+                            + (config.JellyseerrLastSyncSummary ? ' — ' + config.JellyseerrLastSyncSummary : '');
+                    } else {
+                        status.textContent = 'Last sync: never.';
+                    }
+
                     try {
                         var base = ApiClient.serverAddress();
                         document.querySelector('#webhookUrlHint').textContent = base.replace(/\/$/, '') + '/PrivateLibraries/Webhook';
@@ -141,17 +227,77 @@
             .addEventListener('submit', function (e) {
                 e.preventDefault();
                 Dashboard.showLoadingMsg();
-                ApiClient.getPluginConfiguration(PrivateLibrariesConfig.pluginUniqueId).then(function (config) {
-                    config.TagPrefix = document.querySelector('#TagPrefix').value || 'jpl';
-                    config.RestrictNewUsersByDefault = document.querySelector('#RestrictNewUsersByDefault').checked;
-                    config.JellyseerrUrl = document.querySelector('#JellyseerrUrl').value;
-                    config.JellyseerrWebhookSecret = document.querySelector('#JellyseerrWebhookSecret').value;
-                    ApiClient.updatePluginConfiguration(PrivateLibrariesConfig.pluginUniqueId, config).then(function (result) {
-                        Dashboard.processPluginConfigurationUpdateResult(result);
-                    });
+                savePrivateLibrariesConfig().then(function (result) {
+                    Dashboard.processPluginConfigurationUpdateResult(result);
                 });
                 return false;
             });
+
+        // ---- Jellyseerr connection test / manual backfill sync ----
+        (function () {
+            var testBtn = document.querySelector('#jellyseerrTestBtn');
+            var syncBtn = document.querySelector('#jellyseerrSyncBtn');
+            var resultBox = document.querySelector('#jellyseerrSyncResult');
+            var statusBox = document.querySelector('#jellyseerrSyncStatus');
+
+            function post(path) {
+                return ApiClient.ajax({ type: 'POST', url: ApiClient.getUrl('PrivateLibraries/' + path), dataType: 'json' });
+            }
+            function show(text, isError) {
+                resultBox.textContent = text;
+                resultBox.style.color = isError ? '#ff8080' : '';
+                resultBox.style.display = 'block';
+            }
+            // The endpoints answer failures with a JSON { error } body; surface that rather
+            // than a bare status code, since it carries the actionable reason.
+            function describeError(err) {
+                if (err && err.responseText) {
+                    try {
+                        var parsed = JSON.parse(err.responseText);
+                        if (parsed && parsed.error) { return parsed.error; }
+                    } catch (e) { /* fall through */ }
+                }
+                var status = (err && (err.status || (err.response && err.response.status))) || '';
+                return 'Request failed' + (status ? ' (HTTP ' + status + ')' : '') + '. Check the Jellyfin log.';
+            }
+            function busy(btn, on, label) {
+                btn.disabled = on;
+                btn.querySelector('span').textContent = on ? label : btn.dataset.label;
+            }
+
+            testBtn.dataset.label = 'Save & test connection';
+            syncBtn.dataset.label = 'Save & sync now';
+
+            testBtn.addEventListener('click', function () {
+                show('Contacting Jellyseerr…', false);
+                busy(testBtn, true, 'Testing…');
+                // Save first: the server reads the URL and key from the stored configuration,
+                // so testing without saving would test the previous values.
+                savePrivateLibrariesConfig()
+                    .then(function () { return post('Jellyseerr/Test'); })
+                    .then(function (res) { show('Connected to Jellyseerr ' + (res.version || '') + '. API key accepted.', false); })
+                    .catch(function (err) { show(describeError(err), true); })
+                    .then(function () { busy(testBtn, false); });
+            });
+
+            syncBtn.addEventListener('click', function () {
+                show('Syncing… this can take a while on a large Jellyseerr instance.', false);
+                busy(syncBtn, true, 'Syncing…');
+                savePrivateLibrariesConfig()
+                    .then(function () { return post('Jellyseerr/Sync'); })
+                    .then(function (res) {
+                        var text = res.summary || 'Sync finished.';
+                        if (res.unmatchedRequesters && res.unmatchedRequesters.length) {
+                            text += '\n\nNo Jellyfin user matched: ' + res.unmatchedRequesters.join(', ')
+                                + '\nMake sure the Jellyseerr account is linked to, or named the same as, the Jellyfin user.';
+                        }
+                        show(text, false);
+                        statusBox.textContent = 'Last sync: ' + new Date().toLocaleString() + ' — ' + (res.summary || '');
+                    })
+                    .catch(function (err) { show(describeError(err), true); })
+                    .then(function () { busy(syncBtn, false); });
+            });
+        })();
 
         // ---- Hidden media management (independent of the Save button above) ----
         (function () {

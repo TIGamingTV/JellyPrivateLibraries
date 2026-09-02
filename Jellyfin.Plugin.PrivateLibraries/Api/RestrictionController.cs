@@ -30,6 +30,7 @@ public class RestrictionController : ControllerBase
 {
     private static readonly BaseItemKind[] _grantableKinds = { BaseItemKind.Movie, BaseItemKind.Series };
     private readonly RestrictionManager _restrictionManager;
+    private readonly JellyseerrSyncService _jellyseerrSync;
     private readonly ILibraryManager _libraryManager;
     private readonly IUserManager _userManager;
     private readonly IAuthorizationContext _authContext;
@@ -39,18 +40,21 @@ public class RestrictionController : ControllerBase
     /// Initializes a new instance of the <see cref="RestrictionController"/> class.
     /// </summary>
     /// <param name="restrictionManager">The restriction manager.</param>
+    /// <param name="jellyseerrSync">The Jellyseerr backfill sync service.</param>
     /// <param name="libraryManager">The library manager.</param>
     /// <param name="userManager">The user manager.</param>
     /// <param name="authContext">The authorization context.</param>
     /// <param name="logger">The logger.</param>
     public RestrictionController(
         RestrictionManager restrictionManager,
+        JellyseerrSyncService jellyseerrSync,
         ILibraryManager libraryManager,
         IUserManager userManager,
         IAuthorizationContext authContext,
         ILogger<RestrictionController> logger)
     {
         _restrictionManager = restrictionManager;
+        _jellyseerrSync = jellyseerrSync;
         _libraryManager = libraryManager;
         _userManager = userManager;
         _authContext = authContext;
@@ -320,6 +324,59 @@ public class RestrictionController : ControllerBase
         }
 
         return Ok(new { ok = true });
+    }
+
+    /// <summary>
+    /// Verifies the configured Jellyseerr URL and API key.
+    /// </summary>
+    /// <returns>The Jellyseerr version on success.</returns>
+    [HttpPost("Jellyseerr/Test")]
+    [Authorize(Policy = Policies.RequiresElevation)]
+    public async Task<ActionResult> TestJellyseerr()
+    {
+        try
+        {
+            var version = await _jellyseerrSync.TestConnectionAsync(HttpContext.RequestAborted).ConfigureAwait(false);
+            return Ok(new { ok = true, version });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Jellyseerr connection test failed");
+            return StatusCode(502, new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Runs the Jellyseerr backfill sync immediately and returns what it did.
+    /// </summary>
+    /// <returns>The sync summary.</returns>
+    [HttpPost("Jellyseerr/Sync")]
+    [Authorize(Policy = Policies.RequiresElevation)]
+    public async Task<ActionResult> SyncJellyseerr()
+    {
+        try
+        {
+            // No progress reporter: the caller is a browser waiting on the response, and the
+            // scheduled-task view is where progress is meant to be watched.
+            var result = await _jellyseerrSync.SyncAsync(null, HttpContext.RequestAborted).ConfigureAwait(false);
+            return Ok(new
+            {
+                ok = true,
+                summary = result.Summary,
+                requestsRead = result.RequestsRead,
+                grantsCreated = result.GrantsCreated,
+                grantsAlreadyPresent = result.GrantsAlreadyPresent,
+                skippedByStatus = result.RequestsSkippedByStatus,
+                withoutUser = result.RequestsWithoutUser,
+                withoutProviderId = result.RequestsWithoutProviderId,
+                unmatchedRequesters = result.UnmatchedRequesters
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Jellyseerr sync failed");
+            return StatusCode(502, new { error = ex.Message });
+        }
     }
 
     /// <summary>

@@ -12,7 +12,8 @@ namespace Jellyfin.Plugin.PrivateLibraries.Configuration;
 public class PluginConfiguration : BasePluginConfiguration
 {
     /// <summary>
-    /// Gets or sets the base URL of the Jellyseerr instance (informational, shown in the UI).
+    /// Gets or sets the base URL of the Jellyseerr instance (e.g. <c>http://jellyseerr:5055</c>).
+    /// Required for the backfill sync; the inbound webhook does not use it.
     /// </summary>
     public string JellyseerrUrl { get; set; } = string.Empty;
 
@@ -21,6 +22,38 @@ public class PluginConfiguration : BasePluginConfiguration
     /// If empty, webhook processing is rejected.
     /// </summary>
     public string JellyseerrWebhookSecret { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the Jellyseerr API key used to read existing requests over the REST API.
+    /// The webhook only ever reports *new* activity, so this is what lets the plugin
+    /// backfill requests made before the plugin was installed. Empty disables the sync.
+    /// </summary>
+    public string JellyseerrApiKey { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the periodic Jellyseerr backfill sync runs.
+    /// It is additionally a no-op unless <see cref="JellyseerrUrl"/> and
+    /// <see cref="JellyseerrApiKey"/> are both set.
+    /// </summary>
+    public bool JellyseerrSyncEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether requests still awaiting approval are granted
+    /// by the sync. Off by default so the sync matches the webhook, which only grants once a
+    /// request is approved/available.
+    /// </summary>
+    public bool JellyseerrSyncIncludePending { get; set; }
+
+    /// <summary>
+    /// Gets or sets the UTC timestamp (round-trip "o" format) of the last completed sync,
+    /// or an empty string if it has never run. Shown on the configuration page.
+    /// </summary>
+    public string JellyseerrLastSyncUtc { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets a human-readable summary of the last sync, shown on the configuration page.
+    /// </summary>
+    public string JellyseerrLastSyncSummary { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets a value indicating whether every user is restricted automatically
