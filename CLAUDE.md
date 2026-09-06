@@ -4,9 +4,10 @@ Guidance for working in this repository.
 
 ## What this is
 
-A **Jellyfin server plugin** (C# / .NET 9) that restricts each user to only the
-media they requested via Jellyseerr or added from a home-screen widget. It is built
-on Jellyfin's native per-user **allowed-tags whitelist** (`UserPolicy.AllowedTags`).
+A **Jellyfin server plugin** (C#, multi-targeting .NET 9 for Jellyfin 10.11 and
+.NET 10 for Jellyfin 12.0) that restricts each user to only the media they requested
+via Jellyseerr or added from a home-screen widget. It is built on Jellyfin's native
+per-user **allowed-tags whitelist** (`UserPolicy.AllowedTags`).
 
 ## Core mechanism (read before changing logic)
 
@@ -28,7 +29,7 @@ on Jellyfin's native per-user **allowed-tags whitelist** (`UserPolicy.AllowedTag
 
 - `Plugin.cs` — `BasePlugin<PluginConfiguration>`, `IHasWebPages`. Plugin GUID:
   `a3f1c6d2-9b4e-4c8a-bf2d-7e5a1c9d40e1` (keep in sync with `build.yaml`,
-  `manifest.json`, and `configPage.html`).
+  `build.jf12.yaml`, `manifest.json`, `manifest-jf12.json`, and `configPage.html`).
 - `Services/RestrictionManager.cs` — all tag/policy logic. Uses
   `IUserManager.GetUserDto(user).Policy` to read the current policy and
   `UpdatePolicyAsync` to write it; `ILibraryManager` for item lookup/update.
@@ -55,7 +56,33 @@ on Jellyfin's native per-user **allowed-tags whitelist** (`UserPolicy.AllowedTag
   `Grants`, `HiddenItems`, `TagPrefix`, `RestrictNewUsersByDefault`,
   `SchemaVersion`) + config page (`configPage.html`).
 
-## Jellyfin API notes (target 10.11 / master)
+## Supported server versions (multi-targeting)
+
+The project **multi-targets one TFM per supported Jellyfin line**, from identical
+source — only the reference assemblies differ:
+
+| TFM | Jellyfin | `Jellyfin.Controller` | Manifest | Release zip |
+|---|---|---|---|---|
+| `net9.0` | 10.11.x | `10.11.*` | `manifest.json` | `private-libraries_<v>.zip` |
+| `net10.0` | 12.0.x | `12.0.0-rc7` (pinned) | `manifest-jf12.json` | `private-libraries_<v>_jf12.zip` |
+
+- Jellyfin **12.0 is 10.12 renamed** (the leading `10.` was dropped); the plugin API
+  is unchanged from 10.11, which is why no source changes were needed. Do not assume
+  a 12.x API break without checking.
+- The 12.0 reference is **pinned to an exact RC on purpose**: a stray `12.0.0-rcrc3`
+  package on nuget.org sorts *above* `rc7` under SemVer prerelease ordering, so a
+  `12.0.*-*` float would silently resolve to it. Move to `12.0.*` once 12.0.0 is
+  stable.
+- Two manifests are required because Jellyfin's `VersionInfo` has only `targetAbi`,
+  which is a **minimum** server version, and no `maxAbi`. One manifest cannot say
+  "10.11 only" — a 12.x server would match the 10.11 entry and install the .NET 9 DLL.
+- `build.yaml` / `build.jf12.yaml` are the descriptors for the two artifacts. Nothing
+  in CI consumes them; they are metadata and must be kept in step with the manifests.
+
+## Jellyfin API notes (targets 10.11 and 12.0)
+
+Verified identical across `Jellyfin.Controller` 10.11.11 and 12.0.0-rc7 — the whole
+plugin compiles against both with zero warnings.
 
 - `TaskTriggerInfo.Type` is the **enum** `TaskTriggerInfoType` (not a string) in
   10.11+. Older versions used string constants — do not "fix" it back.
@@ -66,9 +93,16 @@ on Jellyfin's native per-user **allowed-tags whitelist** (`UserPolicy.AllowedTag
 
 ## Build & verify
 
+Requires the .NET 9 **and** .NET 10 SDKs; one `build` produces both DLLs.
+
 ```bash
 dotnet build Jellyfin.Plugin.PrivateLibraries/Jellyfin.Plugin.PrivateLibraries.csproj -c Release
+# -> bin/Release/net9.0/...dll   (Jellyfin 10.11)
+# -> bin/Release/net10.0/...dll  (Jellyfin 12.0)
 ```
+
+Add `-f net9.0` / `-f net10.0` to build a single target. A clean build is **0 warnings,
+0 errors** on both; treat any new warning as a regression.
 
 There is no unit test project yet. Manual verification: load the DLL into a test
 Jellyfin (10.11), create two users, confirm each starts **unrestricted** (restriction
@@ -80,19 +114,25 @@ See `progress.md` for history.
 ## Releasing
 
 - `.github/workflows/release.yml` runs on a pushed `v*` tag (or manual dispatch):
-  it builds, packages the DLL as `private-libraries_<version>.zip`, creates a
-  GitHub release, then prepends a new entry to `manifest.json` and commits it to
-  `main` as `github-actions[bot]`. So `manifest.json` is release-driven — the tag
+  it builds both TFMs, packages `private-libraries_<version>.zip` (net9.0) and
+  `private-libraries_<version>_jf12.zip` (net10.0), attaches both to a single
+  GitHub release, then prepends an entry to **both** `manifest.json` (targetAbi
+  `10.11.0.0`) and `manifest-jf12.json` (targetAbi `12.0.0.0`) and commits them to
+  `main` as `github-actions[bot]`. So the manifests are release-driven — the tag
   is the trigger, not the source-tree version fields.
-- The tag version can therefore run ahead of `csproj`/`build.yaml` if a release is
-  cut without bumping those files. As of 1.0.0.6 (audit fixes) that drift exists:
-  `manifest.json` lists 1.0.0.6 while `csproj`/`build.yaml` still read 1.0.0.5.
-  Bump `AssemblyVersion`/`FileVersion`/`Version` (csproj) and `build.yaml` in the
-  same change set as the tag to keep them aligned.
+- The tag version can therefore run ahead of `csproj`/`build.yaml`/`build.jf12.yaml`
+  if a release is cut without bumping those files. Bump `AssemblyVersion`/
+  `FileVersion`/`Version` (csproj) and both `build*.yaml` in the same change set as
+  the tag to keep them aligned.
+- **`v1.3.0.0` is burned**: it was tagged and then manually removed from
+  `manifest.json` (commit `9066f8c`). Do not reuse it — 1.2.0.0 was followed by
+  1.4.0.0.
 
 ## Conventions
 
-- Keep the plugin GUID and `targetAbi` consistent across all metadata files.
+- Keep the plugin GUID consistent across all metadata files. `targetAbi` is
+  deliberately **not** uniform: `10.11.0.0` in `build.yaml`/`manifest.json`,
+  `12.0.0.0` in `build.jf12.yaml`/`manifest-jf12.json`.
 - Jellyfin assemblies are compile-time only (`<ExcludeAssets>runtime</ExcludeAssets>`);
   never bundle them.
 - Update `progress.md` with an entry per change set.

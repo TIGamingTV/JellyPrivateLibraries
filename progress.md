@@ -2,6 +2,64 @@
 
 A running history of changes to JellyPrivateLibraries.
 
+## 2026-09-06 — Jellyfin 12.0 support (v1.4.0.0)
+
+Jellyfin 12.0 (currently RC7) is **10.12 renamed** — the project dropped the leading `10.`
+from its version scheme — so despite the major-looking version bump the plugin API is
+unchanged from 10.11. The backend rewrite that could have broken plugins already shipped in
+10.11.0; 12.0 is a performance/polish release on top of it.
+
+**Verification first.** Before changing anything, the entire unmodified plugin source (all 13
+`.cs` files) was compiled against `Jellyfin.Controller 12.0.0-rc7` on `net10.0`: **0 errors, 0
+warnings**, no obsolete-API diagnostics. Every Jellyfin API the plugin depends on is present
+and unchanged — `IUserManager.GetUserDto`/`UpdatePolicyAsync`, `UserPolicy.AllowedTags` and
+`BlockedTags`, `ILibraryManager.ItemAdded`/`UpdateItemAsync`, `InternalItemsQuery.HasAnyProviderId`,
+`IAuthorizationContext.GetAuthorizationInfo`, `TaskTriggerInfoType`, `BasePlugin<T>`,
+`IHasWebPages`, `IPluginServiceRegistrator`, `IServerApplicationPaths.WebPath`. **No source
+changes were needed** — the incompatibility was purely in packaging.
+
+**The actual problem.** `Jellyfin.Controller 12.0.0-rc7` ships only a `net10.0` library and
+its `MediaBrowser.*` assemblies are stamped `12.0.0.0`, while the plugin was built as a single
+`net9.0` assembly bound to `10.11.11.0`. One artifact cannot serve both server lines.
+
+**Changed**
+
+- `Jellyfin.Plugin.PrivateLibraries.csproj` — `TargetFramework` → `TargetFrameworks`
+  `net9.0;net10.0`, with the `Jellyfin.Controller` reference made conditional per TFM
+  (`10.11.*` for net9.0, `12.0.0-rc7` for net10.0). One `dotnet build` now emits both DLLs.
+  Confirmed by reading the compiled assembly references: the net9.0 output binds
+  `MediaBrowser.Controller 10.11.11.0`, the net10.0 output binds `12.0.0.0`.
+- The 12.0 reference is **pinned to an exact RC**, not floated. A stray `12.0.0-rcrc3`
+  package exists on nuget.org and sorts *above* `rc7` under SemVer prerelease ordering
+  (`'7'` < `'r'`), so a `12.0.*-*` float would silently resolve to it.
+- `manifest-jf12.json` (new) — repository manifest for Jellyfin 12.x, `targetAbi 12.0.0.0`.
+  A second manifest is unavoidable: Jellyfin's `VersionInfo` carries only `targetAbi`, which
+  the server treats as a **minimum** version, and has no `maxAbi`. A 12.x server reading the
+  existing `manifest.json` would judge the `10.11.0.0` entries compatible and install the
+  .NET 9 build. Seeded with an empty `versions` array; the release workflow fills it.
+- `build.jf12.yaml` (new) — artifact descriptor for the 12.0 build, mirroring `build.yaml`.
+- `.github/workflows/build.yml` — installs the .NET 9 *and* 10 SDKs and uploads both DLLs as
+  separate artifacts.
+- `.github/workflows/release.yml` — builds both TFMs, packages `private-libraries_<v>.zip`
+  (net9.0, unchanged name) plus `private-libraries_<v>_jf12.zip` (net10.0), attaches both to
+  the one release, and prepends an entry to both manifests. Also replaced the deprecated
+  `datetime.utcnow()` with a timezone-aware call.
+- Version `1.2.0.0` → **`1.4.0.0`** in csproj and both `build*.yaml`. Skipping 1.3.0.0: that
+  tag exists but its manifest entry was manually removed in `9066f8c`, so the version is
+  burned.
+- `README.md` — server compatibility table, per-version repository URLs, dual-SDK build
+  instructions, and 10.11 → 12.0 upgrade steps. `CLAUDE.md` — multi-targeting section, the
+  pinned-RC rationale, and the two-manifest constraint.
+
+**Notes**
+
+- Jellyfin 12.0 is still a release candidate. When 12.0.0 goes stable the pin should become
+  `12.0.*` (and the `rcrc3` hazard disappears).
+- Not yet run inside a live Jellyfin 12 server — verified by clean compilation against the
+  12.0-rc7 reference assemblies and by inspecting the emitted assembly references.
+- Users upgrading 10.11 → 12.0 must switch repository URL and reinstall; plugin config lives
+  in Jellyfin's config directory, so grants and restriction states survive.
+
 ## 2026-09-02 — Sync existing Jellyseerr requests over the API (v1.2.0.0)
 
 The Jellyseerr integration was inbound-webhook-only, and a webhook by definition only ever

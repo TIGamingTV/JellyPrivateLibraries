@@ -1,11 +1,15 @@
 ---
-# Artifact descriptor for the Jellyfin 10.11.x build (net9.0).
-# The Jellyfin 12.x build is described by build.jf12.yaml.
+# Artifact descriptor for the Jellyfin 12.x build (net10.0).
+# The Jellyfin 10.11.x build is described by build.yaml.
+#
+# Jellyfin 12.0 is 10.12 renamed (the leading "10." was dropped); the plugin API
+# is unchanged from 10.11, so this build is compiled from identical sources and
+# differs only in target framework and reference assemblies.
 name: "Private Libraries"
 guid: "a3f1c6d2-9b4e-4c8a-bf2d-7e5a1c9d40e1"
 version: "1.4.0.0"
-targetAbi: "10.11.0.0"
-framework: "net9.0"
+targetAbi: "12.0.0.0"
+framework: "net10.0"
 overview: "Restrict each user to only their requested or granted media."
 description: >
   Restricts which media each user sees inside their libraries. Media becomes
