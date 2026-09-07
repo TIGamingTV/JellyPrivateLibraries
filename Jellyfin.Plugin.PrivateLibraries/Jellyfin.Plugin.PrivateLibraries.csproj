@@ -1,7 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <!--
+      One TFM per supported Jellyfin server line, because the two lines run on
+      different .NET runtimes and ship different Jellyfin.Controller assemblies:
+        net9.0  -> Jellyfin 10.11.x
+        net10.0 -> Jellyfin 12.0.x  (12.0 is 10.12 renamed; the API is compatible)
+      The plugin source is identical for both - only the reference assemblies differ.
+    -->
+    <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
     <RootNamespace>Jellyfin.Plugin.PrivateLibraries</RootNamespace>
     <AssemblyName>Jellyfin.Plugin.PrivateLibraries</AssemblyName>
     <Nullable>enable</Nullable>
@@ -10,14 +17,26 @@
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
-    <AssemblyVersion>1.2.0.0</AssemblyVersion>
-    <FileVersion>1.2.0.0</FileVersion>
-    <Version>1.2.0.0</Version>
+    <AssemblyVersion>1.4.0.0</AssemblyVersion>
+    <FileVersion>1.4.0.0</FileVersion>
+    <Version>1.4.0.0</Version>
   </PropertyGroup>
 
-  <ItemGroup>
-    <!-- Provided by the Jellyfin server at runtime; compile-time only. -->
+  <!-- Jellyfin 10.11.x. Provided by the server at runtime; compile-time only. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
     <PackageReference Include="Jellyfin.Controller" Version="10.11.*">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <!--
+    Jellyfin 12.0.x. Pinned to an exact release candidate rather than a floating
+    version on purpose: a stray "12.0.0-rcrc3" package exists on nuget.org that
+    sorts *above* rc7 under SemVer prerelease ordering, so a "12.0.*-*" float
+    would silently resolve to it. Bump this to "12.0.*" once 12.0.0 ships stable.
+  -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <PackageReference Include="Jellyfin.Controller" Version="12.0.0-rc*">
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
   </ItemGroup>

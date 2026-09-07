@@ -1,0 +1,12 @@
+[
+    {
+        "guid": "a3f1c6d2-9b4e-4c8a-bf2d-7e5a1c9d40e1",
+        "name": "Private Libraries",
+        "description": "Restricts which media each user sees. Titles appear when requested through Jellyseerr or added from a home-screen widget, using Jellyfin's per-user allowed-tags whitelist. This repository serves the Jellyfin 12.x (net10.0) build; Jellyfin 10.11.x servers should use manifest.json instead.",
+        "overview": "Per-user media restriction via Jellyseerr requests and a home-screen widget (Jellyfin 12.x build).",
+        "owner": "TIGamingTV",
+        "category": "General",
+        "imageUrl": "",
+        "versions": []
+    }
+]

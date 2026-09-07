@@ -34,26 +34,52 @@ The plugin configuration is the **source of truth** for who is restricted and wh
 | Home-screen widget | `Web/private-libraries.js` |
 | DI registration | `PluginServiceRegistrator.cs` |
 
+## Server compatibility
+
+| Jellyfin server | Plugin build | Reference assemblies | Plugin repository manifest |
+|---|---|---|---|
+| **10.11.x** | `bin/Release/net9.0/` | `Jellyfin.Controller 10.11.*` | `manifest.json` |
+| **12.0.x** | `bin/Release/net10.0/` | `Jellyfin.Controller 12.0.0-rc7` | `manifest-jf12.json` |
+
+Jellyfin 12.0 is 10.12 renamed — [the project dropped the leading `10.`](https://github.com/jellyfin/jellyfin/releases/tag/v12.0-rc1) — and it keeps the plugin API of 10.11 unchanged, so both builds compile from **identical source**. They differ only in target framework and reference assemblies: 12.0 runs on .NET 10 and ships `MediaBrowser.*` assemblies stamped `12.0.0.0`, where 10.11 runs on .NET 9 and stamps them `10.11.x`.
+
+Two separate repository manifests are required because Jellyfin's manifest format has only `targetAbi`, which it treats as a *minimum* server version, and no upper bound. A 12.x server pointed at `manifest.json` would consider the `10.11.0.0` entries compatible and install the .NET 9 build.
+
+> **Add one repository URL, not both.** Both manifests describe the same plugin GUID, so a server subscribed to both may offer the wrong build.
+
 ## Building
 
-Requires the .NET 9 SDK (Jellyfin 10.11 targets .NET 9).
+Requires the .NET 9 **and** .NET 10 SDKs — the project multi-targets one framework per supported Jellyfin line.
 
 ```bash
 dotnet build Jellyfin.Plugin.PrivateLibraries/Jellyfin.Plugin.PrivateLibraries.csproj -c Release
 ```
 
-The output `Jellyfin.Plugin.PrivateLibraries.dll` (in `bin/Release/net9.0/`) is the plugin. GitHub Actions (`.github/workflows/build.yml`) also builds it on every push.
+That produces both plugin DLLs in a single pass:
 
-> The project targets `Jellyfin.Controller` `10.11.*`. Match this to your server version if you run something different (the allowed-tags whitelist requires Jellyfin **10.9+**).
+- `bin/Release/net9.0/Jellyfin.Plugin.PrivateLibraries.dll` — for Jellyfin 10.11.x
+- `bin/Release/net10.0/Jellyfin.Plugin.PrivateLibraries.dll` — for Jellyfin 12.0.x
+
+Add `-f net9.0` or `-f net10.0` to build just one. GitHub Actions (`.github/workflows/build.yml`) builds both on every push.
+
+> The allowed-tags whitelist this plugin is built on requires Jellyfin **10.9+**.
 
 ## Installing
 
 ### Option A — via plugin repository URL (recommended)
 
-1. In Jellyfin: **Dashboard → Plugins → Repositories → +** and add this URL:
+1. In Jellyfin: **Dashboard → Plugins → Repositories → +** and add the URL for **your server version**:
+
+   Jellyfin **10.11.x**:
 
    ```
    https://raw.githubusercontent.com/TIGamingTV/JellyPrivateLibraries/main/manifest.json
+   ```
+
+   Jellyfin **12.0.x**:
+
+   ```
+   https://raw.githubusercontent.com/TIGamingTV/JellyPrivateLibraries/main/manifest-jf12.json
    ```
 
 2. Go to **Catalog**, find **Private Libraries** under *General*, and install it.
@@ -61,12 +87,15 @@ The output `Jellyfin.Plugin.PrivateLibraries.dll` (in `bin/Release/net9.0/`) is 
 4. Open **Dashboard → Plugins → Private Libraries** to configure.
 5. Refresh the web UI in your browser — the widget button (a video-library icon) appears in the top header.
 
-Releases are produced by `.github/workflows/release.yml` (triggered by pushing a `v*` tag or running the workflow manually); it builds the DLL, publishes a GitHub Release zip, and updates `manifest.json` on `main` with the download URL and MD5 checksum.
+Releases are produced by `.github/workflows/release.yml` (triggered by pushing a `v*` tag or running the workflow manually); it builds both target frameworks, publishes one GitHub Release carrying both zips (`private-libraries_<version>.zip` for 10.11 and `private-libraries_<version>_jf12.zip` for 12.0), and updates both manifests on `main` with the download URLs and MD5 checksums.
+
+**Upgrading a server from 10.11 to 12.0:** the installed .NET 9 build is not the right artifact for 12.0. Replace the repository URL with the `manifest-jf12.json` one and reinstall the plugin. Plugin configuration lives in Jellyfin's config directory, not in the DLL, so grants and per-user restriction states survive the swap.
 
 ### Option B — manual
 
-1. Copy `Jellyfin.Plugin.PrivateLibraries.dll` into a folder named `Private Libraries` under your Jellyfin `plugins/` directory (e.g. `/config/plugins/Private Libraries/`).
-2. Restart Jellyfin, then configure as above.
+1. Take the DLL matching your server: the `net9.0` build for Jellyfin 10.11.x, or the `net10.0` build for Jellyfin 12.0.x (see [Server compatibility](#server-compatibility)).
+2. Copy `Jellyfin.Plugin.PrivateLibraries.dll` into a folder named `Private Libraries` under your Jellyfin `plugins/` directory (e.g. `/config/plugins/Private Libraries/`).
+3. Restart Jellyfin, then configure as above.
 
 ## Jellyseerr webhook setup
 
