@@ -277,25 +277,26 @@
         return true;
     }
 
-    // Jellyfin 12: insert a MUI-styled IconButton into the MUI Toolbar.
-    // The MutationObserver in ensureButton() will re-insert it if React
-    // re-renders the toolbar and removes our node.
+    // Jellyfin 12: the toolbar is owned by React, so inserting into it
+    // directly causes React's reconciler to remove our node on the next
+    // render. Instead we place the button on document.body and position it
+    // dynamically relative to the user-menu button using getBoundingClientRect,
+    // giving natural visual placement without fighting React.
+    var _muiResizeObserver = null;
+
+    function positionMuiButton(btn) {
+        var ref = document.querySelector('[aria-controls="app-user-menu"]');
+        if (!ref) { return; }
+        var r = ref.getBoundingClientRect();
+        // Centre vertically on the reference button; place immediately to its left.
+        btn.style.top = Math.round(r.top + (r.height - 40) / 2) + 'px';
+        btn.style.left = Math.round(r.left - 44) + 'px';
+    }
+
     function tryInjectMuiToolbar() {
-        // The user-menu button has a stable aria-controls attribute.
+        // Only activate when the MUI toolbar is present (confirms we are on v12).
         var userMenuBtn = document.querySelector('[aria-controls="app-user-menu"]');
         if (!userMenuBtn) { return false; }
-
-        var toolbar = userMenuBtn.closest('.MuiToolbar-root');
-        if (!toolbar) { return false; }
-
-        // Walk up from the user-menu button to its direct child of the toolbar.
-        // MUI Tooltip clones props onto its single child without adding a wrapper,
-        // so the chain is typically: button → div(Box) → div.MuiToolbar-root.
-        var anchor = userMenuBtn;
-        while (anchor.parentElement && anchor.parentElement !== toolbar) {
-            anchor = anchor.parentElement;
-        }
-        if (!anchor || anchor.parentElement !== toolbar) { return false; }
 
         var btn = document.createElement('button');
         btn.id = BTN_ID;
@@ -305,30 +306,52 @@
         btn.setAttribute('tabindex', '0');
         // Mirror the MUI IconButton classes used by the existing toolbar buttons.
         btn.className = 'MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeLarge';
+        // Override position: fixed is needed so the button is taken out of normal
+        // flow and painted at absolute screen coordinates regardless of scroll.
+        btn.style.cssText = 'position:fixed;z-index:1200;width:40px;height:40px;padding:8px;';
         btn.innerHTML = '<svg class="MuiSvgIcon-root" xmlns="http://www.w3.org/2000/svg" '
             + 'focusable="false" aria-hidden="true" viewBox="0 0 24 24">'
             + '<path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12'
             + 'c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z"/>'
             + '</svg>';
         btn.addEventListener('click', openDialog);
-        // Insert immediately before the user-menu box so our button sits just
-        // to its left in the toolbar's flex row.
-        toolbar.insertBefore(btn, anchor);
-        log('injected into MuiToolbar (Jellyfin 12)');
+        document.body.appendChild(btn);
+
+        // Set initial position and keep it updated when the toolbar resizes
+        // (e.g. window resize, drawer open/close changing toolbar width).
+        positionMuiButton(btn);
+        if (typeof ResizeObserver !== 'undefined') {
+            var toolbar = userMenuBtn.closest('.MuiToolbar-root');
+            if (toolbar) {
+                if (_muiResizeObserver) { _muiResizeObserver.disconnect(); }
+                _muiResizeObserver = new ResizeObserver(function () { positionMuiButton(btn); });
+                _muiResizeObserver.observe(toolbar);
+            }
+        }
+        window.addEventListener('resize', function () { positionMuiButton(btn); });
+
+        log('injected as MUI-positioned fixed button (Jellyfin 12)');
         return true;
     }
 
     function ensureButton() {
-        if (document.getElementById(BTN_ID)) { return; }
+        var existing = document.getElementById(BTN_ID);
+        if (existing) {
+            // Button exists but may need repositioning if the toolbar shifted
+            // (e.g. after a React re-render changed the user-menu button's position).
+            positionMuiButton(existing);
+            return;
+        }
         // Try v10.11 DOM first; fall back to MUI toolbar for v12.
         if (!tryInjectLegacyHeader()) {
             tryInjectMuiToolbar();
         }
     }
 
-    // The header re-renders on navigation (both legacy and React router).
-    // ensureButton() is a no-op when the button already exists, and re-inserts
-    // it whenever React removes it during a toolbar re-render.
+    // The header re-renders on navigation. For v10.11 the button lives inside
+    // the header so the observer re-inserts it when React or routing wipes it.
+    // For v12 the button is on document.body and survives re-renders; the observer
+    // re-positions it whenever the toolbar DOM changes.
     var observer = new MutationObserver(function () { ensureButton(); });
     function start() {
         log('starting');
