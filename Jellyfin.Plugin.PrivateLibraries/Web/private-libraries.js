@@ -60,7 +60,21 @@
             + '.pl-switch input:checked + .pl-slider:before{transform:translateX(20px);}'
             + '.pl-close{float:right;background:none;border:0;color:#aaa;font-size:1.6em;cursor:pointer;line-height:1;}'
             + '.pl-muted{opacity:.6;font-size:.9em;padding:6px 0;}'
-            + '.pl-error{background:#4a1f1f;color:#ffb4b4;border-radius:6px;padding:8px 12px;margin:8px 0;font-size:.88em;display:none;}';
+            + '.pl-error{background:#4a1f1f;color:#ffb4b4;border-radius:6px;padding:8px 12px;margin:8px 0;font-size:.88em;display:none;}'
+            // Jellyfin 12's MUI toolbar buttons get their actual appearance from
+            // emotion-injected CSS keyed to auto-generated hash classes, not from the
+            // plain "MuiIconButton-root" global class name alone (that's only present
+            // for identification). Borrowing just the class names left our injected
+            // <button> with the browser's default button chrome (opaque face, border),
+            // which read as a solid white box sitting on top of the dark header instead
+            // of blending in like a real icon button, so reset it explicitly here and
+            // pick up the real icon colour at runtime (see positionMuiButton).
+            + '.pl-mui-btn{position:fixed;width:40px;height:40px;padding:8px;'
+            + 'display:inline-flex;align-items:center;justify-content:center;'
+            + 'background:transparent;border:0;border-radius:50%;cursor:pointer;'
+            + '-webkit-tap-highlight-color:transparent;}'
+            + '.pl-mui-btn:hover{background-color:rgba(127,127,127,.2);}'
+            + '.pl-mui-btn:focus-visible{outline:2px solid currentColor;outline-offset:2px;}';
         var style = document.createElement('style');
         style.id = 'privateLibrariesStyles';
         style.textContent = css;
@@ -295,9 +309,37 @@
     // giving natural visual placement without fighting React.
     var _muiResizeObserver = null;
 
+    // The user-avatar menu button (and therefore the whole toolbar it lives in) is
+    // absent on pages that don't show the library-oriented toolbar at all - the video
+    // OSD (AppToolbar returns null there) and "public" paths like login/select-server
+    // (isUserMenuAvailable=false). The dashboard/admin app (including this plugin's
+    // own config page) reuses the exact same toolbar and avatar button, but sets this
+    // class on <body> for its own CSS scoping - reused here to hide our button there
+    // too, matching where SyncPlay/RemotePlay/Search are also never shown.
+    function isMuiToolbarButtonAllowed() {
+        return !!document.querySelector('[aria-controls="app-user-menu"]')
+            && !document.body.classList.contains('dashboardDocument');
+    }
+
+    function removeMuiButton() {
+        var btn = document.getElementById(BTN_ID);
+        if (btn) { btn.remove(); }
+        if (_muiResizeObserver) {
+            _muiResizeObserver.disconnect();
+            _muiResizeObserver = null;
+        }
+    }
+
     function positionMuiButton(btn) {
         var ref = document.querySelector('[aria-controls="app-user-menu"]');
         if (!ref) { return; }
+
+        // Our <button> is appended to document.body, not into the toolbar itself, so
+        // it never picks up the toolbar's (theme-dependent) icon colour by normal CSS
+        // inheritance. Copy it from a real toolbar icon button on every reposition so
+        // it keeps matching if the user switches between light/dark theme at runtime.
+        btn.style.color = getComputedStyle(ref).color;
+
         var avatarRect = ref.getBoundingClientRect();
 
         // The avatar button sits in its own flex-shrink Box, immediately preceded by a
@@ -329,9 +371,10 @@
     }
 
     function tryInjectMuiToolbar() {
-        // Only activate when the MUI toolbar is present (confirms we are on v12).
+        // Only activate when the MUI toolbar's user menu is present (confirms we are
+        // on v12) and we're not on a page that shouldn't show it (see above).
+        if (!isMuiToolbarButtonAllowed()) { return false; }
         var userMenuBtn = document.querySelector('[aria-controls="app-user-menu"]');
-        if (!userMenuBtn) { return false; }
 
         var btn = document.createElement('button');
         btn.id = BTN_ID;
@@ -339,13 +382,15 @@
         btn.title = 'My Private Library';
         btn.setAttribute('aria-label', 'My Private Library');
         btn.setAttribute('tabindex', '0');
-        // Mirror the MUI IconButton classes used by the existing toolbar buttons.
-        btn.className = 'MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeLarge';
-        // Override position: fixed is needed so the button is taken out of normal
-        // flow and painted at absolute screen coordinates regardless of scroll.
-        btn.style.cssText = 'position:fixed;z-index:1200;width:40px;height:40px;padding:8px;';
+        // pl-mui-btn (defined in injectStyles) resets the browser's default <button>
+        // chrome (opaque face, border) that otherwise made this look like a solid
+        // white box sitting on top of the header instead of a real icon button. The
+        // Mui* classes are kept only for identification/consistency with real MUI
+        // markup, not because they supply any styling on their own.
+        btn.className = 'MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeLarge pl-mui-btn';
+        btn.style.zIndex = '1200';
         btn.innerHTML = '<svg class="MuiSvgIcon-root" xmlns="http://www.w3.org/2000/svg" '
-            + 'focusable="false" aria-hidden="true" viewBox="0 0 24 24">'
+            + 'focusable="false" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor">'
             + '<path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12'
             + 'c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z"/>'
             + '</svg>';
@@ -372,8 +417,19 @@
     function ensureButton() {
         var existing = document.getElementById(BTN_ID);
         if (existing) {
-            // Button exists but may need repositioning if the toolbar shifted
-            // (e.g. after a React re-render changed the user-menu button's position).
+            // The v10.11 button lives inside .headerRight, so it's automatically
+            // hidden along with it by CSS on pages that shouldn't show it (see
+            // tryInjectLegacyHeader). The v12 button lives directly on document.body
+            // though, so nothing else will ever remove or hide it - do that here
+            // whenever it no longer belongs on the current page (dashboard/admin,
+            // video OSD, public paths), and let ensureButton() recreate it via
+            // tryInjectMuiToolbar() once we're back somewhere it belongs.
+            if (existing.parentElement === document.body && !isMuiToolbarButtonAllowed()) {
+                removeMuiButton();
+                return;
+            }
+            // Otherwise it may just need repositioning if the toolbar shifted (e.g.
+            // after a React re-render changed the user-menu button's position).
             positionMuiButton(existing);
             return;
         }
@@ -386,12 +442,27 @@
     // The header re-renders on navigation. For v10.11 the button lives inside
     // the header so the observer re-inserts it when React or routing wipes it.
     // For v12 the button is on document.body and survives re-renders; the observer
-    // re-positions it whenever the toolbar DOM changes.
+    // re-positions it whenever the toolbar DOM changes, and removes it when
+    // navigating to a page it doesn't belong on (see isMuiToolbarButtonAllowed).
     var observer = new MutationObserver(function () { ensureButton(); });
     function start() {
         log('starting');
+        // Needed up front (not just lazily on first dialog open) so the .pl-mui-btn
+        // rules below exist as soon as the Jellyfin 12 button is first injected.
+        injectStyles();
         ensureButton();
-        observer.observe(document.body, { childList: true, subtree: true });
+        // attributes/attributeFilter on the class attribute is needed in addition to
+        // childList/subtree: navigating into/out of the dashboard app only *sometimes*
+        // also mutates unrelated content in the same tick (childList changes
+        // elsewhere in the page). Watching the dashboardDocument class directly makes
+        // hiding/showing the v12 button on that transition deterministic instead of
+        // relying on an incidental mutation to also happen to occur.
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['class']
+        });
     }
 
     if (document.readyState === 'loading') {
