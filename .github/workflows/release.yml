@@ -40,6 +40,8 @@ jobs:
           else
             V="${{ github.event.inputs.version }}"
           fi
+          # Strip any accidental leading/trailing whitespace (e.g. from manual dispatch input).
+          V="${V// /}"
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "tag=v$V" >> "$GITHUB_OUTPUT"
 
