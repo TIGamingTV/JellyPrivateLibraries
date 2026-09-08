@@ -260,10 +260,21 @@
         console.debug('[PrivateLibraries] ' + msg);
     }
 
-    // Jellyfin 10.11: insert into .headerRight as a native icon button.
+    // .headerRight is always present in the DOM (scripts/libraryMenu.js renders it
+    // unconditionally into .skinHeader), even on Jellyfin 12's default "modern" layout,
+    // where RootAppRouter wraps it in a display:none ancestor and renders the MUI
+    // toolbar instead. A plain querySelector null-check can't tell the two situations
+    // apart, so this also confirms the header actually has layout (mirrors jQuery's
+    // :visible test) before treating it as the real Jellyfin 10.11-style header.
+    function isRendered(el) {
+        return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+    }
+
+    // Jellyfin 10.11 (and Jellyfin 12 in "legacy" layout mode): insert into
+    // .headerRight as a native icon button.
     function tryInjectLegacyHeader() {
         var header = document.querySelector('.headerRight');
-        if (!header) { return false; }
+        if (!header || !isRendered(header)) { return false; }
         var btn = document.createElement('button');
         btn.id = BTN_ID;
         btn.type = 'button';

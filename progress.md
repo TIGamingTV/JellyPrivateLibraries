@@ -2,6 +2,75 @@
 
 A running history of changes to JellyPrivateLibraries.
 
+## 2026-09-08 — Fix widget button still missing on Jellyfin 12.0 (v1.9.1.0)
+
+**The previous fix's assumption was wrong.** The 2026-09-08 entry below states
+"the old header structure (`.headerRight`, `.skinHeader`, `paper-icon-button-light`)
+no longer exists in the DOM" on Jellyfin 12. That was never actually verified against
+`jellyfin-web` source and is false — checked by cloning the `release-12.z` branch of
+`jellyfin/jellyfin-web` directly:
+
+- `scripts/libraryMenu.js` (`renderHeader()`) still unconditionally builds
+  `.headerRight`/`.headerTop` inside `.skinHeader`, and `AppHeader.tsx` still
+  unconditionally `import()`s that script on every mount, on both the legacy and the
+  new React/MUI layout.
+- What changed is only that `RootAppRouter.tsx` now renders
+  `<AppHeader isHidden={layoutManager.modern || isNewLayoutPath} />`, wrapping that
+  whole legacy DOM subtree (including `.headerRight`) in a `display: none` ancestor
+  `<div>` whenever the "modern" (MUI) layout is active — it doesn't remove it.
+- `components/apphost.js` → `getDefaultLayout()` returns `LayoutMode.Modern`
+  unconditionally for a normal browser, and `LegacyLayoutModes` only contains
+  `desktop-legacy` / `mobile-legacy` / `tv`. So on Jellyfin 12, **every desktop/mobile
+  browser defaults to the modern (MUI) layout** and `.headerRight` is present but
+  hidden the moment the page loads. (On 10.11 the equivalent flag is
+  `layoutManager.experimental`, which defaults to `false`, so `.headerRight` is
+  visible there by default — which is why the bug never showed up on 10.11.)
+
+**Root cause of the actual bug.** `Web/private-libraries.js`'s `tryInjectLegacyHeader()`
+only checked `document.querySelector('.headerRight') !== null`. On Jellyfin 12 that
+query still succeeds (the node exists, just hidden), so the function inserted the
+button into the hidden node and returned `true` — which short-circuited
+`ensureButton()` before it ever reached `tryInjectMuiToolbar()`. Every fix attempted
+in the four commits before this one (`c3e4c94`, `5cf739f`, `b1d7ad8`, `4e0a500`) changed
+*how* the MUI-toolbar button was built/positioned, but none of them were ever actually
+reached at runtime, because the legacy branch always "succeeded" first.
+
+Separately verified the **File Transformation plugin integration is not the problem**:
+pulled its current `main` branch source (`PluginInterface.cs`,
+`TransformationRegistrationPayload.cs`, `TransformationHelper.cs`,
+`WebFileTransformationService.cs`). The reflection contract this plugin relies on
+(`RegisterTransformation(JObject)`, `{id, fileNamePattern, callbackAssembly,
+callbackClass, callbackMethod}`, a `{"contents": "..."}` payload delivered to a
+`public static string Method(FileTransformationPayload)`) is unchanged and still
+matches `ScriptInjector.cs` exactly. The newer version added optional
+`transformationEndpoint`/`transformationPipe` fields and a full middleware rewrite
+(regex-matched paths under `/web/`, ETag/304 support, ordering by insertion), but none
+of that affects this integration.
+
+**Fix (`Web/private-libraries.js`)** — `tryInjectLegacyHeader()` now also requires the
+found `.headerRight` to actually have layout (`offsetWidth || offsetHeight ||
+getClientRects().length`, the same technique jQuery's `:visible` uses), which is
+`0`/falsy for every descendant of a `display: none` ancestor regardless of the
+element's own box model. This is safe for the genuinely-visible 10.11/legacy-layout
+case too: `libraryMenu.js` unhides `headerUserButton` (and `headerHomeButton`/
+`headerSearchButton`) for every logged-in user via `updateUserInHeader()`, independent
+of the current page, so `.headerRight` always has non-zero size whenever a session
+exists and the ancestor isn't hidden. With the legacy branch now correctly reporting
+failure on Jellyfin 12's default layout, `ensureButton()` falls through to
+`tryInjectMuiToolbar()` as originally intended.
+
+Bumped `1.9.0.0` → `1.9.1.0` (csproj + both `build*.yaml`, which had drifted to a stale
+`1.4.0.0` — the tag-driven release flow keeps `manifest*.json` and the csproj current
+but doesn't touch `build*.yaml`; same known drift pattern as earlier entries in this
+log). Not run against a live server in this environment (no `dotnet` SDK available
+here); the JS change was verified with `node --check` and by tracing the exact
+DOM/CSS from the cloned `jellyfin-web` `release-12.z` and `release-10.11.z` branches
+rather than assumption.
+
+Also confirmed while syncing with `main`: the `net10.0` `Jellyfin.Controller` pin
+noted as stale in an earlier draft of this entry has already been moved to the
+stable `12.0.0` release by a prior commit on `main` — no action needed here.
+
 ## 2026-09-08 — Fix widget button not appearing on Jellyfin 12.0
 
 **Root cause.** Jellyfin 12.0 ships a completely rewritten web client based on React and
