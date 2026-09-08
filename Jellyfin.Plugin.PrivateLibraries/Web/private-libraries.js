@@ -259,23 +259,69 @@
         var btn = document.createElement('button');
         btn.id = BTN_ID;
         btn.type = 'button';
-        btn.className = 'headerButton headerButtonRight paper-icon-button-light';
         btn.title = 'My Private Library';
         btn.setAttribute('aria-label', 'My Private Library');
-        btn.innerHTML = '<span class="material-icons" aria-hidden="true">video_library</span>';
         btn.addEventListener('click', openDialog);
         return btn;
+    }
+
+    // Jellyfin 10.11 header: inject a styled icon button into .headerRight.
+    function tryInjectLegacyHeader() {
+        var header = document.querySelector('.headerRight');
+        if (!header) {
+            return false;
+        }
+        var btn = makeButton();
+        btn.className = 'headerButton headerButtonRight paper-icon-button-light';
+        btn.innerHTML = '<span class="material-icons" aria-hidden="true">video_library</span>';
+        header.insertBefore(btn, header.firstChild);
+        return true;
+    }
+
+    // Jellyfin 12 header: the toolbar is a MUI Toolbar. The user-menu icon button
+    // carries aria-controls="app-user-menu". We insert our button as a MUI-styled
+    // IconButton immediately before it (i.e. before its flex-box wrapper).
+    function tryInjectMuiToolbar() {
+        // Find the user-menu trigger button by its stable aria-controls attribute.
+        var userMenuBtn = document.querySelector('[aria-controls="app-user-menu"]');
+        if (!userMenuBtn) {
+            return false;
+        }
+        // Walk up to find the enclosing MuiToolbar so we can insert inside it.
+        var toolbar = userMenuBtn.closest('.MuiToolbar-root');
+        if (!toolbar) {
+            return false;
+        }
+        // Walk up from the button to find its direct-child-of-toolbar ancestor.
+        // MUI Tooltip adds no extra DOM element, so the chain is typically:
+        //   button[aria-controls] → div (Box flexGrow:0) → div.MuiToolbar-root
+        var userMenuBox = userMenuBtn.parentElement;
+        while (userMenuBox && userMenuBox.parentElement !== toolbar) {
+            userMenuBox = userMenuBox.parentElement;
+        }
+        if (!userMenuBox) {
+            return false;
+        }
+        var btn = makeButton();
+        // Mirror the MUI IconButton appearance used by the existing toolbar buttons.
+        btn.className = 'MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeLarge';
+        btn.setAttribute('tabindex', '0');
+        // Use an SVG video-library icon that matches Material-UI's icon style.
+        btn.innerHTML = '<svg class="MuiSvgIcon-root" focusable="false" aria-hidden="true" viewBox="0 0 24 24">'
+            + '<path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z"/>'
+            + '</svg>';
+        toolbar.insertBefore(btn, userMenuBox);
+        return true;
     }
 
     function ensureButton() {
         if (document.getElementById(BTN_ID)) {
             return;
         }
-        var header = document.querySelector('.headerRight');
-        if (!header) {
-            return;
+        // Try the Jellyfin 10.11 legacy header first, then the v12 MUI toolbar.
+        if (!tryInjectLegacyHeader()) {
+            tryInjectMuiToolbar();
         }
-        header.insertBefore(makeButton(), header.firstChild);
     }
 
     // The header is re-rendered on navigation, so keep re-checking.

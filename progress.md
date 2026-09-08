@@ -2,6 +2,32 @@
 
 A running history of changes to JellyPrivateLibraries.
 
+## 2026-09-08 — Fix widget button not appearing on Jellyfin 12.0
+
+**Root cause.** Jellyfin 12.0 ships a completely rewritten web client based on React and
+Material-UI (MUI). The old header structure (`.headerRight`, `.skinHeader`, `paper-icon-button-light`)
+no longer exists in the DOM. `private-libraries.js` called
+`document.querySelector('.headerRight')`, which returned `null`, so `ensureButton()` returned
+immediately and the widget button was never injected.
+
+**What changed in the File Transformation plugin.** The updated `PluginInterface.cs` now takes
+`Newtonsoft.Json.Linq.JObject` directly as the parameter to `RegisterTransformation`. The existing
+reflection-based registration in `ScriptInjector.cs` dynamically reads the parameter type and calls
+`JObject.Parse` on it, so no changes were needed there — the existing reflection code adapts
+automatically to whichever concrete type the plugin uses.
+
+**Changed**
+
+- `Web/private-libraries.js` — `ensureButton()` split into two injection strategies:
+  - `tryInjectLegacyHeader()` — unchanged 10.11 path: looks for `.headerRight` and inserts a
+    `paper-icon-button-light` styled button with a `<span class="material-icons">`.
+  - `tryInjectMuiToolbar()` — new 12.0 path: locates the MUI toolbar via `.MuiToolbar-root`,
+    anchors to the user-menu `IconButton` via `[aria-controls="app-user-menu"]`, walks up to
+    its direct-toolbar-child ancestor, and inserts a `MuiButtonBase-root MuiIconButton-root
+    MuiIconButton-sizeLarge` button with an inline SVG icon (video_library path) before it.
+  - Legacy path is tried first; MUI path runs only if `.headerRight` is absent. The MutationObserver
+    keeps re-checking so the button reappears after React re-renders the header on navigation.
+
 ## 2026-09-06 — Jellyfin 12.0 support (v1.4.0.0)
 
 Jellyfin 12.0 (currently RC7) is **10.12 renamed** — the project dropped the leading `10.`
