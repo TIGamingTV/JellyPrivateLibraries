@@ -298,10 +298,34 @@
     function positionMuiButton(btn) {
         var ref = document.querySelector('[aria-controls="app-user-menu"]');
         if (!ref) { return; }
-        var r = ref.getBoundingClientRect();
-        // Centre vertically on the reference button; place immediately to its left.
-        btn.style.top = Math.round(r.top + (r.height - 40) / 2) + 'px';
-        btn.style.left = Math.round(r.left - 44) + 'px';
+        var avatarRect = ref.getBoundingClientRect();
+
+        // The avatar button sits in its own flex-shrink Box, immediately preceded by a
+        // sibling Box (flexGrow:1, justifyContent:flex-end) holding the page's toolbar
+        // actions - SyncPlay / RemotePlay(Cast) / Search, whichever the current page
+        // renders. That sibling Box always exists (even with no children), but it
+        // stretches to fill the toolbar's leftover space, so *its own* left edge is
+        // usually far from the avatar - only its rendered children are actually packed
+        // against the avatar. Anchor to the leftmost visible one of those instead of
+        // hardcoding a fixed offset from the avatar, otherwise our button lands on top
+        // of whichever action button the current page happens to render closest to the
+        // avatar (e.g. Search).
+        var leftAnchorRect = avatarRect;
+        var actionsGroup = ref.parentElement && ref.parentElement.previousElementSibling;
+        if (actionsGroup) {
+            for (var i = 0; i < actionsGroup.children.length; i++) {
+                var childRect = actionsGroup.children[i].getBoundingClientRect();
+                if (childRect.width || childRect.height) {
+                    leftAnchorRect = childRect;
+                    break;
+                }
+            }
+        }
+
+        // Centre vertically on the avatar; place immediately to the left of whatever
+        // was found above.
+        btn.style.top = Math.round(avatarRect.top + (avatarRect.height - 40) / 2) + 'px';
+        btn.style.left = Math.round(leftAnchorRect.left - 44) + 'px';
     }
 
     function tryInjectMuiToolbar() {
