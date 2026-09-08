@@ -9,6 +9,14 @@
         "imageUrl": "",
         "versions": [
             {
+                "version": "1.9.3.0",
+                "changelog": "Release 1.9.3.0",
+                "targetAbi": "10.11.0.0",
+                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.9.3.0/private-libraries_1.9.3.0.zip",
+                "checksum": "6aaff5963dbe4fcd14c73644f63118d5",
+                "timestamp": "2026-09-08T23:04:57Z"
+            },
+            {
                 "version": "1.9.2.0",
                 "changelog": "Release 1.9.2.0",
                 "targetAbi": "10.11.0.0",
