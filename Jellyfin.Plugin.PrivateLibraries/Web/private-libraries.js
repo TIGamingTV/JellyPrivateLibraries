@@ -277,64 +277,58 @@
         return true;
     }
 
-    // Jellyfin 12: the toolbar is React/MUI and React will wipe any element we
-    // imperatively insert into it on the next re-render. Instead, we append a
-    // fixed-position button directly to document.body and use CSS to place it
-    // in the top-right corner at the same visual level as the AppBar, which has
-    // z-index 1100 in MUI's default theme. We go one higher so we sit on top.
-    function tryInjectFloating() {
-        // Only activate when the MUI AppBar is present (confirms we are on v12).
-        var appBar = document.querySelector('.MuiAppBar-root, header.MuiPaper-root, [class*="MuiAppBar"]');
-        if (!appBar) { return false; }
+    // Jellyfin 12: insert a MUI-styled IconButton into the MUI Toolbar.
+    // The MutationObserver in ensureButton() will re-insert it if React
+    // re-renders the toolbar and removes our node.
+    function tryInjectMuiToolbar() {
+        // The user-menu button has a stable aria-controls attribute.
+        var userMenuBtn = document.querySelector('[aria-controls="app-user-menu"]');
+        if (!userMenuBtn) { return false; }
+
+        var toolbar = userMenuBtn.closest('.MuiToolbar-root');
+        if (!toolbar) { return false; }
+
+        // Walk up from the user-menu button to its direct child of the toolbar.
+        // MUI Tooltip clones props onto its single child without adding a wrapper,
+        // so the chain is typically: button → div(Box) → div.MuiToolbar-root.
+        var anchor = userMenuBtn;
+        while (anchor.parentElement && anchor.parentElement !== toolbar) {
+            anchor = anchor.parentElement;
+        }
+        if (!anchor || anchor.parentElement !== toolbar) { return false; }
+
         var btn = document.createElement('button');
         btn.id = BTN_ID;
         btn.type = 'button';
         btn.title = 'My Private Library';
         btn.setAttribute('aria-label', 'My Private Library');
-        // Inline styles — immune to class-name changes across MUI versions.
-        btn.style.cssText = [
-            'position:fixed',
-            'top:4px',
-            'right:56px',   /* left of the user-menu avatar (~48px wide) */
-            'z-index:1200',
-            'width:40px',
-            'height:40px',
-            'padding:8px',
-            'border:0',
-            'border-radius:50%',
-            'background:transparent',
-            'color:inherit',
-            'cursor:pointer',
-            'display:flex',
-            'align-items:center',
-            'justify-content:center',
-            'opacity:0.8'
-        ].join(';');
-        btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
-            + 'fill="currentColor" width="24" height="24" aria-hidden="true">'
+        btn.setAttribute('tabindex', '0');
+        // Mirror the MUI IconButton classes used by the existing toolbar buttons.
+        btn.className = 'MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeLarge';
+        btn.innerHTML = '<svg class="MuiSvgIcon-root" xmlns="http://www.w3.org/2000/svg" '
+            + 'focusable="false" aria-hidden="true" viewBox="0 0 24 24">'
             + '<path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12'
             + 'c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z"/>'
             + '</svg>';
-        btn.addEventListener('mouseenter', function () { btn.style.opacity = '1'; });
-        btn.addEventListener('mouseleave', function () { btn.style.opacity = '0.8'; });
         btn.addEventListener('click', openDialog);
-        document.body.appendChild(btn);
-        log('injected as fixed-position button (Jellyfin 12)');
+        // Insert immediately before the user-menu box so our button sits just
+        // to its left in the toolbar's flex row.
+        toolbar.insertBefore(btn, anchor);
+        log('injected into MuiToolbar (Jellyfin 12)');
         return true;
     }
 
     function ensureButton() {
         if (document.getElementById(BTN_ID)) { return; }
-        // Try v10.11 DOM first; fall back to floating overlay for v12.
+        // Try v10.11 DOM first; fall back to MUI toolbar for v12.
         if (!tryInjectLegacyHeader()) {
-            tryInjectFloating();
+            tryInjectMuiToolbar();
         }
     }
 
     // The header re-renders on navigation (both legacy and React router).
-    // For v10.11 the button lives inside the header so we need to re-insert it.
-    // For v12 the button is on document.body so it survives React re-renders —
-    // the observer still guards against it being unexpectedly removed.
+    // ensureButton() is a no-op when the button already exists, and re-inserts
+    // it whenever React removes it during a toolbar re-render.
     var observer = new MutationObserver(function () { ensureButton(); });
     function start() {
         log('starting');
