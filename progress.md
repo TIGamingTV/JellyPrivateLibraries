@@ -2,6 +2,40 @@
 
 A running history of changes to JellyPrivateLibraries.
 
+## 2026-09-08 — Drop Jellyfin 10.11 (net9.0) support (v1.10.0.0)
+
+Removed the net9.0 target framework and everything that existed only to ship it
+alongside net10.0. Jellyfin 10.11 users can still install `v1.9.2.0` or earlier
+manually; the plugin repository (`manifest.json`) now only carries `12.0.0.0`
+entries going forward.
+
+- `Jellyfin.Plugin.PrivateLibraries.csproj`: `<TargetFrameworks>net9.0;net10.0</...>`
+  → single `<TargetFramework>net10.0</TargetFramework>`; dropped the conditional
+  `ItemGroup` pinning `Jellyfin.Controller 10.11.*` and made the 12.0.0 reference
+  unconditional. Bumped version `1.9.3.0` → `1.10.0.0`.
+- Consolidated `build.yaml`/`build.jf12.yaml` into a single `build.yaml`
+  (net10.0/12.0.0.0); deleted `build.jf12.yaml`.
+- Consolidated `manifest.json`/`manifest-jf12.json` into a single `manifest.json`:
+  kept the 12.0.0.0 version history (from the former `manifest-jf12.json`, minus a
+  malformed duplicate `"1.6.0.0 "` entry with a trailing space), dropped the
+  10.11.0.0-only entries and description caveat; deleted `manifest-jf12.json`.
+- `.github/workflows/build.yml`: single `10.0.x` SDK, single build/upload step
+  (no more separate 10.11/12 artifact uploads).
+- `.github/workflows/release.yml`: single SDK setup, single package/zip step
+  (`private-libraries_<version>_jf12.zip`), single manifest-update + commit step
+  targeting `manifest.json` only.
+- `README.md`: rewrote "Server compatibility", "Building", and "Installing" to
+  describe the single 12.0.x/net10.0 target, with a note pointing 10.11 users at
+  manually installing `v1.9.2.0` or earlier.
+- `CLAUDE.md`: rewrote the multi-targeting sections into a single "Supported
+  server version" table plus a new "Dropped Jellyfin 10.11 support" subsection
+  documenting what changed and how to reintroduce dual-targeting if ever needed.
+- No `.cs` changes: the source had no `#if`/conditional-compilation differences
+  between the two TFMs, only the `PackageReference` differed.
+- Verified: `dotnet build -c Release` on the trimmed csproj produces a clean
+  `bin/Release/net10.0/Jellyfin.Plugin.PrivateLibraries.dll` with 0 warnings, 0
+  errors, and no `bin/Release/net9.0/` output.
+
 ## 2026-09-08 — Fix Jellyfin 12 button showing on admin pages + looking "layered on top" (v1.9.3.0)
 
 **Report after v1.9.2.0 was released and installed:** the button now appears in the

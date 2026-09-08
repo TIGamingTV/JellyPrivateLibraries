@@ -13,13 +13,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 9.0.x builds the Jellyfin 10.11 target, 10.0.x the Jellyfin 12 target.
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: |
-            9.0.x
-            10.0.x
+          dotnet-version: 10.0.x
 
       - name: Restore
         run: dotnet restore Jellyfin.Plugin.PrivateLibraries/Jellyfin.Plugin.PrivateLibraries.csproj
@@ -27,14 +24,8 @@ jobs:
       - name: Build
         run: dotnet build Jellyfin.Plugin.PrivateLibraries/Jellyfin.Plugin.PrivateLibraries.csproj --configuration Release --no-restore
 
-      - name: Upload artifact (Jellyfin 10.11)
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Jellyfin.Plugin.PrivateLibraries-jf10.11
-          path: Jellyfin.Plugin.PrivateLibraries/bin/Release/net9.0/Jellyfin.Plugin.PrivateLibraries.dll
-
-      - name: Upload artifact (Jellyfin 12)
-        uses: actions/upload-artifact@v4
-        with:
-          name: Jellyfin.Plugin.PrivateLibraries-jf12
+          name: Jellyfin.Plugin.PrivateLibraries
           path: Jellyfin.Plugin.PrivateLibraries/bin/Release/net10.0/Jellyfin.Plugin.PrivateLibraries.dll

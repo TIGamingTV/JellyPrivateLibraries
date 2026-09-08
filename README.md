@@ -36,50 +36,41 @@ The plugin configuration is the **source of truth** for who is restricted and wh
 
 ## Server compatibility
 
-| Jellyfin server | Plugin build | Reference assemblies | Plugin repository manifest |
-|---|---|---|---|
-| **10.11.x** | `bin/Release/net9.0/` | `Jellyfin.Controller 10.11.*` | `manifest.json` |
-| **12.0.x** | `bin/Release/net10.0/` | `Jellyfin.Controller 12.0.0-rc7` | `manifest-jf12.json` |
+| Jellyfin server | Plugin build | Reference assemblies |
+|---|---|---|
+| **12.0.x** | `bin/Release/net10.0/` | `Jellyfin.Controller 12.0.0` |
 
-Jellyfin 12.0 is 10.12 renamed — [the project dropped the leading `10.`](https://github.com/jellyfin/jellyfin/releases/tag/v12.0-rc1) — and it keeps the plugin API of 10.11 unchanged, so both builds compile from **identical source**. They differ only in target framework and reference assemblies: 12.0 runs on .NET 10 and ships `MediaBrowser.*` assemblies stamped `12.0.0.0`, where 10.11 runs on .NET 9 and stamps them `10.11.x`.
+Jellyfin 12.0 is 10.12 renamed — [the project dropped the leading `10.`](https://github.com/jellyfin/jellyfin/releases/tag/v12.0-rc1).
 
-Two separate repository manifests are required because Jellyfin's manifest format has only `targetAbi`, which it treats as a *minimum* server version, and no upper bound. A 12.x server pointed at `manifest.json` would consider the `10.11.0.0` entries compatible and install the .NET 9 build.
-
-> **Add one repository URL, not both.** Both manifests describe the same plugin GUID, so a server subscribed to both may offer the wrong build.
+> **Jellyfin 10.11.x is no longer supported.** Versions up to `v1.9.2.0` were built
+> for 10.11 (net9.0); that target was dropped in `v1.10.0.0` to drop the maintenance
+> cost of dual-targeting. If you're still on 10.11, download `v1.9.2.0` (or earlier)
+> from the [Releases page](https://github.com/TIGamingTV/JellyPrivateLibraries/releases)
+> and install it manually — see [Option B](#option-b--manual) below. It will not
+> receive further updates.
 
 ## Building
 
-Requires the .NET 9 **and** .NET 10 SDKs — the project multi-targets one framework per supported Jellyfin line.
+Requires the .NET 10 SDK.
 
 ```bash
 dotnet build Jellyfin.Plugin.PrivateLibraries/Jellyfin.Plugin.PrivateLibraries.csproj -c Release
 ```
 
-That produces both plugin DLLs in a single pass:
+That produces `bin/Release/net10.0/Jellyfin.Plugin.PrivateLibraries.dll`. GitHub
+Actions (`.github/workflows/build.yml`) builds it on every push.
 
-- `bin/Release/net9.0/Jellyfin.Plugin.PrivateLibraries.dll` — for Jellyfin 10.11.x
-- `bin/Release/net10.0/Jellyfin.Plugin.PrivateLibraries.dll` — for Jellyfin 12.0.x
-
-Add `-f net9.0` or `-f net10.0` to build just one. GitHub Actions (`.github/workflows/build.yml`) builds both on every push.
-
-> The allowed-tags whitelist this plugin is built on requires Jellyfin **10.9+**.
+> The allowed-tags whitelist this plugin is built on requires Jellyfin **10.9+**;
+> in practice this plugin only targets and supports **12.0.x** (see above).
 
 ## Installing
 
 ### Option A — via plugin repository URL (recommended)
 
-1. In Jellyfin: **Dashboard → Plugins → Repositories → +** and add the URL for **your server version**:
-
-   Jellyfin **10.11.x**:
+1. In Jellyfin: **Dashboard → Plugins → Repositories → +** and add:
 
    ```
    https://raw.githubusercontent.com/TIGamingTV/JellyPrivateLibraries/main/manifest.json
-   ```
-
-   Jellyfin **12.0.x**:
-
-   ```
-   https://raw.githubusercontent.com/TIGamingTV/JellyPrivateLibraries/main/manifest-jf12.json
    ```
 
 2. Go to **Catalog**, find **Private Libraries** under *General*, and install it.
@@ -87,14 +78,14 @@ Add `-f net9.0` or `-f net10.0` to build just one. GitHub Actions (`.github/work
 4. Open **Dashboard → Plugins → Private Libraries** to configure.
 5. Refresh the web UI in your browser — the widget button (a video-library icon) appears in the top header.
 
-Releases are produced by `.github/workflows/release.yml` (triggered by pushing a `v*` tag or running the workflow manually); it builds both target frameworks, publishes one GitHub Release carrying both zips (`private-libraries_<version>.zip` for 10.11 and `private-libraries_<version>_jf12.zip` for 12.0), and updates both manifests on `main` with the download URLs and MD5 checksums.
-
-**Upgrading a server from 10.11 to 12.0:** the installed .NET 9 build is not the right artifact for 12.0. Replace the repository URL with the `manifest-jf12.json` one and reinstall the plugin. Plugin configuration lives in Jellyfin's config directory, not in the DLL, so grants and per-user restriction states survive the swap.
+Releases are produced by `.github/workflows/release.yml` (triggered by pushing a `v*` tag or running the workflow manually); it builds the plugin, publishes a GitHub Release carrying the zip, and updates `manifest.json` on `main` with the download URL and MD5 checksum.
 
 ### Option B — manual
 
-1. Take the DLL matching your server: the `net9.0` build for Jellyfin 10.11.x, or the `net10.0` build for Jellyfin 12.0.x (see [Server compatibility](#server-compatibility)).
-2. Copy `Jellyfin.Plugin.PrivateLibraries.dll` into a folder named `Private Libraries` under your Jellyfin `plugins/` directory (e.g. `/config/plugins/Private Libraries/`).
+1. Grab `Jellyfin.Plugin.PrivateLibraries.dll` from the build output or a
+   [Release](https://github.com/TIGamingTV/JellyPrivateLibraries/releases) zip
+   matching your server (12.0.x → latest release; 10.11.x → `v1.9.2.0` or earlier).
+2. Copy it into a folder named `Private Libraries` under your Jellyfin `plugins/` directory (e.g. `/config/plugins/Private Libraries/`).
 3. Restart Jellyfin, then configure as above.
 
 ## Jellyseerr webhook setup
