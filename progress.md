@@ -2,6 +2,83 @@
 
 A running history of changes to JellyPrivateLibraries.
 
+## 2026-09-08 — Fix Jellyfin 12 button showing on admin pages + looking "layered on top" (v1.9.3.0)
+
+**Report after v1.9.2.0 was released and installed:** the button now appears in the
+right place, but (1) it stays visible on the admin dashboard / plugin config pages
+where it shouldn't be, and (2) it doesn't look integrated with the other toolbar
+buttons - visually like a white box sitting on top rather than a real icon button.
+
+**Issue 1 — persists on admin/dashboard pages.** The v12 (MUI) button is appended
+directly to `document.body` with `position: fixed`, unlike the v10.11 button, which
+lives inside `.headerRight` and is therefore automatically hidden along with it by the
+visibility fix in the previous entry. Checked `jellyfin-web` `release-12.z` again:
+`apps/dashboard/AppLayout.tsx` reuses the exact same shared `components/toolbar/AppToolbar`
+(and therefore the same `UserMenuButton`/`aria-controls="app-user-menu"`) as the
+library app, so `tryInjectMuiToolbar()`'s existing "is the avatar present" check can't
+tell library pages and dashboard/admin pages apart on its own - both have the avatar.
+What *does* distinguish them: `AppLayout.tsx` explicitly does
+`document.body.classList.add('dashboardDocument')` on mount and removes it on unmount
+- an existing signal the app's own SCSS already keys off (`.dashboardDocument
+.dashboard-appBar`, etc.), not something inferred.
+
+- Added `isMuiToolbarButtonAllowed()` = avatar present AND `!document.body
+  .classList.contains('dashboardDocument')`. `tryInjectMuiToolbar()` now requires it
+  before creating the button, and `ensureButton()` now actively removes an existing
+  v12 button (and disconnects its `ResizeObserver`) the moment it stops being
+  allowed, instead of only ever repositioning it - recreating it via
+  `tryInjectMuiToolbar()` once the user is back somewhere it belongs. This also
+  correctly hides it on the video OSD and public (login/select-server) paths, where
+  the avatar itself is absent - matching where SyncPlay/RemotePlay/Search are also
+  never shown, per the user's own comparison.
+- The `MutationObserver` driving all of this only watched `childList`/`subtree` on
+  `document.body`. Toggling `dashboardDocument` is a `class` *attribute* change on
+  `<body>` itself, which that config does not observe - it happened to still work
+  when some other content also happened to mutate in the same tick, but a throwaway
+  jsdom-based test (fresh JSDOM instance, real `document.body.classList`/
+  `getBoundingClientRect` stubs, no live server needed) that toggled *only* the class
+  reproduced the button lingering. Now also observes
+  `{attributes: true, attributeFilter: ['class']}` on the same call, so hiding/showing
+  is deterministic on the exact transition rather than incidental.
+
+**Issue 2 — looks "layered on top", not integrated.** The v12 button borrowed MUI's
+*class names* (`MuiButtonBase-root MuiIconButton-root ...`) hoping to look like a real
+toolbar button, but MUI v5's actual visual styling is applied via emotion-injected CSS
+keyed to auto-generated hash classes - the plain global class names carry no styling
+of their own (they exist for identification/testing only). So our plain `<button>`
+still rendered with the browser's default UA button chrome: an opaque
+light/white face and an outset border, which read as a solid box sitting on the dark
+header rather than blending in as an icon button - and the raw injected `<svg>` had
+no `fill` set, so its icon defaulted to black (the SVG spec's initial `fill` value) on
+top of that white face.
+
+- Added a `.pl-mui-btn` rule to the stylesheet already injected for the dialog
+  (`injectStyles()`, now called at startup instead of lazily on first dialog open, so
+  it's available as soon as the button is): resets `background`, `border`,
+  `border-radius: 50%`, adds a neutral `:hover`/`:focus-visible` state, and removes
+  tap-highlight - explicit CSS this plugin controls, rather than leaning on MUI
+  classes that don't actually do anything for a hand-built element.
+- `fill="currentColor"` added to the injected `<svg>` so the icon renders in whatever
+  `color` the button has, instead of SVG's default black.
+- Because the button lives on `document.body` and not inside the toolbar, it never
+  picks up the toolbar's (theme-dependent) icon colour through normal CSS
+  inheritance. `positionMuiButton()` now also copies `getComputedStyle(avatarButton)
+  .color` onto the button on every reposition, so it matches the real toolbar icons
+  and keeps matching if the user switches between light/dark theme at runtime.
+
+**Verification.** No `dotnet` SDK available in this environment; this is a pure JS
+change to an embedded resource, no compile step needed regardless. Beyond
+`node --check`, wrote a throwaway jsdom harness (`jsdom` installed via `npm install
+--no-save`, not committed) simulating the real v12 toolbar DOM structure
+(avatar + a synthetic actions group, with/without `dashboardDocument`) and asserted:
+button appears and is positioned correctly with only Search present, anchors to Cast
+when both Cast and Search are present, does not appear when `dashboardDocument` is
+set or when no toolbar/avatar exists at all (video OSD / public paths), disappears
+immediately when `dashboardDocument` is toggled on with no other DOM change and
+reappears when it's toggled back off, copies the avatar's computed color, and that
+the existing v10.11 `.headerRight` injection path (from the two previous fixes) still
+works unchanged.
+
 ## 2026-09-08 — Fix Jellyfin 12 widget button overlapping the search icon (v1.9.2.0)
 
 **Report after v1.9.1.0 was released and installed:** the button now appears (the
