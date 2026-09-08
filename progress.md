@@ -2,6 +2,42 @@
 
 A running history of changes to JellyPrivateLibraries.
 
+## 2026-09-08 — Fix Jellyfin 12 widget button overlapping the search icon (v1.9.2.0)
+
+**Report after v1.9.1.0 was released and installed:** the button now appears (the
+hidden-`.headerRight` detection fix worked), but it renders on top of / covering the
+toolbar's search icon.
+
+**Root cause, verified against the same `jellyfin-web` `release-12.z` clone used for
+the previous fix.** `positionMuiButton()` placed the button at a hardcoded
+`avatarRect.left - 44`. In the actual toolbar
+(`apps/modern/components/AppToolbar/index.tsx`), the avatar's `IconButton` sits in its
+own `<Box sx={{flexGrow:0}}>`, immediately preceded by a sibling
+`<Box sx={{display:'flex', flexGrow:1, justifyContent:'flex-end'}}>` holding
+`<SyncPlayButton/><RemotePlayButton/><SearchButton/>` (in that DOM order, packed
+against the end of the box, i.e. against the avatar). `SyncPlayButton` renders `null`
+unless SyncPlay is active; `RemotePlayButton` renders a Cast icon (or a "casting to…"
+button) essentially always; `SearchButton` always renders. So on almost every real
+install, `SearchButton` is the single closest action to the avatar — exactly
+`44px` to its left, which is precisely where the hardcoded offset placed our button.
+
+**Fix (`Web/private-libraries.js`)** — `positionMuiButton()` now walks
+`ref.parentElement.previousElementSibling` (that always-present sibling Box) and picks
+the **first child with a non-zero rendered box** (i.e. whichever of SyncPlay/RemotePlay
+is actually visible, in DOM order) as the left anchor instead of the avatar itself,
+falling back to the avatar when the group has no visible children (e.g. on a public
+path where the whole `buttons` group is empty). Deliberately not anchoring to the
+sibling Box's own bounding rect: it has `flexGrow:1` so its own box spans the toolbar's
+entire leftover space regardless of how many children it has, which is not where the
+visible buttons actually sit.
+
+Bumped `1.9.1.0` → `1.9.2.0`. Verified with `node --check`; not exercised in a live
+Jellyfin 12 client here (no `dotnet` SDK in this environment, and this is a pure JS
+change to an embedded resource, so no compile step is needed regardless — but visual
+placement should be spot-checked in a browser against a page that has SyncPlay
+active, one with an active cast session, and a plain page with only Search, to make
+sure the button consistently lands to the left of all of them without gaps or overlap).
+
 ## 2026-09-08 — Fix widget button still missing on Jellyfin 12.0 (v1.9.1.0)
 
 **The previous fix's assumption was wrong.** The 2026-09-08 entry below states
