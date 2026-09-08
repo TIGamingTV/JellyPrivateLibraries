@@ -24,13 +24,10 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      # 9.0.x builds the Jellyfin 10.11 target, 10.0.x the Jellyfin 12 target.
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: |
-            9.0.x
-            10.0.x
+          dotnet-version: 10.0.x
 
       - name: Determine version
         id: ver
@@ -45,7 +42,6 @@ jobs:
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "tag=v$V" >> "$GITHUB_OUTPUT"
 
-      # Builds both target frameworks in one pass.
       - name: Build
         run: dotnet build Jellyfin.Plugin.PrivateLibraries/Jellyfin.Plugin.PrivateLibraries.csproj -c Release
 
@@ -54,23 +50,13 @@ jobs:
         run: |
           set -euo pipefail
           V="${{ steps.ver.outputs.version }}"
-          mkdir -p dist
+          mkdir -p dist staging
 
-          # Jellyfin 10.11.x artifact (net9.0) - keeps the historical zip name.
-          mkdir -p staging/jf1011
-          cp Jellyfin.Plugin.PrivateLibraries/bin/Release/net9.0/Jellyfin.Plugin.PrivateLibraries.dll staging/jf1011/
-          ZIP="private-libraries_${V}.zip"
-          (cd staging/jf1011 && zip -r "../../dist/$ZIP" .)
+          cp Jellyfin.Plugin.PrivateLibraries/bin/Release/net10.0/Jellyfin.Plugin.PrivateLibraries.dll staging/
+          ZIP="private-libraries_${V}_jf12.zip"
+          (cd staging && zip -r "../dist/$ZIP" .)
           echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
           echo "checksum=$(md5sum "dist/$ZIP" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
-
-          # Jellyfin 12.x artifact (net10.0).
-          mkdir -p staging/jf12
-          cp Jellyfin.Plugin.PrivateLibraries/bin/Release/net10.0/Jellyfin.Plugin.PrivateLibraries.dll staging/jf12/
-          ZIP12="private-libraries_${V}_jf12.zip"
-          (cd staging/jf12 && zip -r "../../dist/$ZIP12" .)
-          echo "zip12=$ZIP12" >> "$GITHUB_OUTPUT"
-          echo "checksum12=$(md5sum "dist/$ZIP12" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -79,22 +65,15 @@ jobs:
           name: Private Libraries ${{ steps.ver.outputs.version }}
           files: |
             dist/${{ steps.pkg.outputs.zip }}
-            dist/${{ steps.pkg.outputs.zip12 }}
           fail_on_unmatched_files: true
 
-      # Jellyfin's VersionInfo has only targetAbi (a *minimum* server version) and no
-      # maxAbi, so a single manifest cannot describe both builds: a 12.x server reading
-      # the 10.11 entry would consider it compatible and install the net9.0 DLL. The two
-      # builds therefore live in two separate repository manifests.
-      - name: Update manifests
+      - name: Update manifest
         env:
           VERSION: ${{ steps.ver.outputs.version }}
           REPO: ${{ github.repository }}
           TAG: ${{ steps.ver.outputs.tag }}
-          ZIP_JF1011: ${{ steps.pkg.outputs.zip }}
-          CHECKSUM_JF1011: ${{ steps.pkg.outputs.checksum }}
-          ZIP_JF12: ${{ steps.pkg.outputs.zip12 }}
-          CHECKSUM_JF12: ${{ steps.pkg.outputs.checksum12 }}
+          ZIP: ${{ steps.pkg.outputs.zip }}
+          CHECKSUM: ${{ steps.pkg.outputs.checksum }}
         run: |
           python3 - <<'PY'
           import json, os, datetime
@@ -102,38 +81,35 @@ jobs:
           version = os.environ['VERSION']
           repo = os.environ['REPO']
           tag = os.environ['TAG']
+          zipname = os.environ['ZIP']
+          checksum = os.environ['CHECKSUM']
           ts = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
-          targets = [
-              ('manifest.json', '10.11.0.0', os.environ['ZIP_JF1011'], os.environ['CHECKSUM_JF1011']),
-              ('manifest-jf12.json', '12.0.0.0', os.environ['ZIP_JF12'], os.environ['CHECKSUM_JF12']),
-          ]
-
-          for path, abi, zipname, checksum in targets:
-              with open(path) as f:
-                  data = json.load(f)
-              plugin = data[0]
-              entry = {
-                  "version": version,
-                  "changelog": f"Release {version}",
-                  "targetAbi": abi,
-                  "sourceUrl": f"https://github.com/{repo}/releases/download/{tag}/{zipname}",
-                  "checksum": checksum,
-                  "timestamp": ts,
-              }
-              vers = [v for v in plugin.get('versions', []) if v.get('version') != version]
-              vers.insert(0, entry)
-              plugin['versions'] = vers
-              with open(path, 'w') as f:
-                  json.dump(data, f, indent=4)
-                  f.write('\n')
-              print(f"{path}: added {version} (targetAbi {abi})")
+          path = 'manifest.json'
+          with open(path) as f:
+              data = json.load(f)
+          plugin = data[0]
+          entry = {
+              "version": version,
+              "changelog": f"Release {version}",
+              "targetAbi": "12.0.0.0",
+              "sourceUrl": f"https://github.com/{repo}/releases/download/{tag}/{zipname}",
+              "checksum": checksum,
+              "timestamp": ts,
+          }
+          vers = [v for v in plugin.get('versions', []) if v.get('version') != version]
+          vers.insert(0, entry)
+          plugin['versions'] = vers
+          with open(path, 'w') as f:
+              json.dump(data, f, indent=4)
+              f.write('\n')
+          print(f"{path}: added {version}")
           PY
 
-      - name: Commit manifests to main
+      - name: Commit manifest to main
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add manifest.json manifest-jf12.json
-          git commit -m "Update plugin manifests for ${{ steps.ver.outputs.version }}" || { echo "No manifest changes"; exit 0; }
+          git add manifest.json
+          git commit -m "Update plugin manifest for ${{ steps.ver.outputs.version }}" || { echo "No manifest changes"; exit 0; }
           git push origin HEAD:main

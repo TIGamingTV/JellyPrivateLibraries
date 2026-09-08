@@ -2,7 +2,7 @@
     {
         "guid": "a3f1c6d2-9b4e-4c8a-bf2d-7e5a1c9d40e1",
         "name": "Private Libraries",
-        "description": "Restricts which media each user sees. Titles appear when requested through Jellyseerr or added from a home-screen widget, using Jellyfin's per-user allowed-tags whitelist.",
+        "description": "Restricts which media each user sees. Titles appear when requested through Jellyseerr or added from a home-screen widget, using Jellyfin's per-user allowed-tags whitelist. Supports Jellyfin 12.0.x; 10.11.x users should install an older release manually (see the project README).",
         "overview": "Per-user media restriction via Jellyseerr requests and a home-screen widget.",
         "owner": "TIGamingTV",
         "category": "General",
@@ -11,186 +11,74 @@
             {
                 "version": "1.9.3.0",
                 "changelog": "Release 1.9.3.0",
-                "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.9.3.0/private-libraries_1.9.3.0.zip",
-                "checksum": "6aaff5963dbe4fcd14c73644f63118d5",
+                "targetAbi": "12.0.0.0",
+                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.9.3.0/private-libraries_1.9.3.0_jf12.zip",
+                "checksum": "e09c1b36daa82ba3dcc7206507673d49",
                 "timestamp": "2026-09-08T23:04:57Z"
             },
             {
                 "version": "1.9.2.0",
                 "changelog": "Release 1.9.2.0",
-                "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.9.2.0/private-libraries_1.9.2.0.zip",
-                "checksum": "2b7fba8fc7b618bb918c398549c2a01e",
+                "targetAbi": "12.0.0.0",
+                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.9.2.0/private-libraries_1.9.2.0_jf12.zip",
+                "checksum": "bbc4c687e00054a7ecbf65d9bbf12499",
                 "timestamp": "2026-09-08T22:45:41Z"
             },
             {
                 "version": "1.9.1.0",
                 "changelog": "Release 1.9.1.0",
-                "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.9.1.0/private-libraries_1.9.1.0.zip",
-                "checksum": "65f146e32a82b4156ddd0a8e31b3c308",
+                "targetAbi": "12.0.0.0",
+                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.9.1.0/private-libraries_1.9.1.0_jf12.zip",
+                "checksum": "d51a5daa73889f882e2f480175c24305",
                 "timestamp": "2026-09-08T22:31:09Z"
             },
             {
                 "version": "1.9.0.0",
                 "changelog": "Release 1.9.0.0",
-                "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.9.0.0/private-libraries_1.9.0.0.zip",
-                "checksum": "1f05dfaa64937fd33232daff68328b13",
+                "targetAbi": "12.0.0.0",
+                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.9.0.0/private-libraries_1.9.0.0_jf12.zip",
+                "checksum": "9241d1edcd683b9ab4f64eb7ee31f9a7",
                 "timestamp": "2026-09-08T22:00:28Z"
             },
             {
                 "version": "1.8.0.0",
                 "changelog": "Release 1.8.0.0",
-                "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.8.0.0/private-libraries_1.8.0.0.zip",
-                "checksum": "831b602ce6fbc29b3d09907f483a65ae",
+                "targetAbi": "12.0.0.0",
+                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.8.0.0/private-libraries_1.8.0.0_jf12.zip",
+                "checksum": "22a6f4a05c18fac91fc5fc1685a39293",
                 "timestamp": "2026-09-08T21:44:17Z"
             },
             {
                 "version": "1.7.0.0",
                 "changelog": "Release 1.7.0.0",
-                "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.7.0.0/private-libraries_1.7.0.0.zip",
-                "checksum": "04694ffb600294578980d627834c5159",
+                "targetAbi": "12.0.0.0",
+                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.7.0.0/private-libraries_1.7.0.0_jf12.zip",
+                "checksum": "4f065e6758f31599f6ef9e306ab6a49e",
                 "timestamp": "2026-09-08T19:07:18Z"
             },
             {
                 "version": "1.6.0.0",
                 "changelog": "Release 1.6.0.0",
-                "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.6.0.0/private-libraries_1.6.0.0.zip",
-                "checksum": "5c1ef1a5a2bde0175667a9600571e814",
+                "targetAbi": "12.0.0.0",
+                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.6.0.0/private-libraries_1.6.0.0_jf12.zip",
+                "checksum": "f9935a9aeb77c242efe3f037145b5787",
                 "timestamp": "2026-09-08T18:32:22Z"
             },
             {
                 "version": "1.5.0.0",
                 "changelog": "Release 1.5.0.0",
-                "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.5.0.0/private-libraries_1.5.0.0.zip",
-                "checksum": "824f1e7a2dc499c262e080419474e0e3",
+                "targetAbi": "12.0.0.0",
+                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.5.0.0/private-libraries_1.5.0.0_jf12.zip",
+                "checksum": "a136677c0dd6051c5547c2c9e26445bc",
                 "timestamp": "2026-09-08T06:55:13Z"
             },
             {
                 "version": "1.4.0.0",
                 "changelog": "Release 1.4.0.0",
-                "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.4.0.0/private-libraries_1.4.0.0.zip",
-                "checksum": "94ac44679beee982e957ba2b243096e2",
+                "targetAbi": "12.0.0.0",
+                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.4.0.0/private-libraries_1.4.0.0_jf12.zip",
+                "checksum": "6c303fa79ce8366e52abbfeded73db4e",
                 "timestamp": "2026-09-07T15:04:22Z"
-            },
-            {
-                "version": "1.2.0.0",
-                "changelog": "Release 1.2.0.0",
-                "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.2.0.0/private-libraries_1.2.0.0.zip",
-                "checksum": "8b2f22ec84c30b20b70be359cb5e935c",
-                "timestamp": "2026-09-02T12:33:28Z"
-            },
-            {
-                "version": "1.1.2.0",
-                "changelog": "Release 1.1.2.0",
-                "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.1.2.0/private-libraries_1.1.2.0.zip",
-                "checksum": "7b02ebe811ada530435478c4e86699bd",
-                "timestamp": "2026-09-01T19:37:41Z"
-            },
-            {
-                "version": "1.1.1.0",
-                "changelog": "Release 1.1.1.0",
-                "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.1.1.0/private-libraries_1.1.1.0.zip",
-                "checksum": "1e192a2cfe8cd5c084a53a16d5c4b87e",
-                "timestamp": "2026-09-01T19:24:52Z"
-            },
-            {
-                "version": "1.1.0.0",
-                "changelog": "Release 1.1.0.0",
-                "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.1.0.0/private-libraries_1.1.0.0.zip",
-                "checksum": "0e2a46c5e07e3927e226aa8199da5347",
-                "timestamp": "2026-09-01T19:02:49Z"
-            },
-            {
-                "version": "1.0.0.9",
-                "changelog": "Release 1.0.0.9",
-                "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.0.0.9/private-libraries_1.0.0.9.zip",
-                "checksum": "01ac91d2f1be16d7ff7467a4201d59b9",
-                "timestamp": "2026-09-01T12:05:31Z"
-            },
-            {
-                "version": "1.0.0.8",
-                "changelog": "Release 1.0.0.8",
-                "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.0.0.8/private-libraries_1.0.0.8.zip",
-                "checksum": "c65801994f96784fd3c547f29d731ad8",
-                "timestamp": "2026-08-10T22:11:33Z"
-            },
-            {
-                "version": "1.0.0.7",
-                "changelog": "Release 1.0.0.7",
-                "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.0.0.7/private-libraries_1.0.0.7.zip",
-                "checksum": "0245c340450f3b0898edaf74e539f655",
-                "timestamp": "2026-07-14T19:06:13Z"
-            },
-            {
-                "version": "1.0.0.6",
-                "changelog": "Release 1.0.0.6",
-                "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.0.0.6/private-libraries_1.0.0.6.zip",
-                "checksum": "dd1d92511c91d47f0750496d34dd864c",
-                "timestamp": "2026-07-12T00:10:33Z"
-            },
-            {
-                "version": "1.0.0.5",
-                "changelog": "Release 1.0.0.5",
-                "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.0.0.5/private-libraries_1.0.0.5.zip",
-                "checksum": "c027a53deebbcbea4d373631aaace265",
-                "timestamp": "2026-07-11T13:04:51Z"
-            },
-            {
-                "version": "1.0.0.4",
-                "changelog": "Release 1.0.0.4",
-                "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.0.0.4/private-libraries_1.0.0.4.zip",
-                "checksum": "cf993f6b4cfba3d356874563b1e3f4f3",
-                "timestamp": "2026-07-10T23:48:29Z"
-            },
-            {
-                "version": "1.0.0.3",
-                "changelog": "Release 1.0.0.3",
-                "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.0.0.3/private-libraries_1.0.0.3.zip",
-                "checksum": "d58e3e1d59c0bb25d1b053d8599dd8fd",
-                "timestamp": "2026-07-10T23:31:09Z"
-            },
-            {
-                "version": "1.0.0.2",
-                "changelog": "Release 1.0.0.2",
-                "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.0.0.2/private-libraries_1.0.0.2.zip",
-                "checksum": "faab47f18c3e373af551212e215eec55",
-                "timestamp": "2026-07-10T23:21:59Z"
-            },
-            {
-                "version": "1.0.0.1",
-                "changelog": "Release 1.0.0.1",
-                "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.0.0.1/private-libraries_1.0.0.1.zip",
-                "checksum": "ad20bd8088836ab8d3be26fddc9255e9",
-                "timestamp": "2026-07-10T23:02:51Z"
-            },
-            {
-                "version": "1.0.0.0",
-                "changelog": "Release 1.0.0.0",
-                "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://github.com/TIGamingTV/JellyPrivateLibraries/releases/download/v1.0.0.0/private-libraries_1.0.0.0.zip",
-                "checksum": "1927dd1ab8f67bff7e6ed25fab91facc",
-                "timestamp": "2026-07-10T23:48:55Z"
             }
         ]
     }
