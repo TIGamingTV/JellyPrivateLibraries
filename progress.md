@@ -2,6 +2,63 @@
 
 A running history of changes to JellyPrivateLibraries.
 
+## 2026-09-09 — Fix Jellyfin 12 button: inject in-flow into the MUI toolbar instead of floating it (v2.0.1.0)
+
+Adapted the same fix TIGamingTV shipped for JellyWatchParty
+(https://github.com/TIGamingTV/JellyWatchParty/pull/65) to this plugin's
+`Web/private-libraries.js`. That PR disproved, via live testing against the real
+jellyfin-web 12.0 production bundle in headless Chromium, the assumption behind
+all of this plugin's prior v12 button fixes (`fix/v12-mui-toolbar-button`,
+`fix/v12-header-hidden-detection`, `fix/v12-button-overlaps-search`,
+`fix/v12-button-context-and-style`): that React strips any foreign node
+inserted directly into the MUI toolbar it manages. It doesn't — React
+reconciles against its own fiber tree, removes only nodes it created, and
+never enumerates the real child list (hydration is the sole exception, and
+jellyfin-web mounts with `createRoot`, never `hydrateRoot`).
+
+- Removed `positionMuiButton()`, `_muiResizeObserver`, `removeMuiButton()`,
+  `isMuiToolbarButtonAllowed()`, and the `window.resize` listener — all the
+  `getBoundingClientRect`/`ResizeObserver` machinery that existed only because
+  the button was `position:fixed` on `document.body`, anchored to the
+  toolbar's user-menu avatar.
+- Added `findMuiActionsBox()` — resolves the MUI toolbar's own actions `Box`
+  (the flex container holding SyncPlay/RemotePlay/Search) as the toolbar child
+  immediately preceding the avatar's `Box`, via
+  `avatar.closest('.MuiToolbar-root > *').previousElementSibling`. Returns
+  `null` (no injection) on the video OSD, public paths, and the admin
+  dashboard, same as before.
+- Added `findDonorButton()` / `buildMuiButton()` — clones a neighbouring MUI
+  `IconButton`'s class list verbatim (MUI 6 keeps real styling in
+  emotion-generated hash classes; the stable `Mui*` names carry none), with a
+  `.pl-mui-btn-standalone` CSS fallback when no donor exists.
+- `tryInjectMuiToolbar()` simplified to: find the actions box, build the
+  button with donor classes, `box.appendChild(button)` — an ordinary in-flow
+  flex child, not a positioned floating element.
+- `ensureButton()`: for the v12 button, re-pins it to the trailing slot next
+  to the avatar when React reorders around it, and removes it when navigating
+  somewhere it doesn't belong. Also handles a live legacy→modern layout switch
+  (`layoutManager.setLayout()` runs without a page reload), migrating a
+  stranded legacy button into the newly-appeared MUI toolbar.
+- The `MutationObserver` callback is now coalesced through
+  `requestAnimationFrame`, since `ensureButton()` mutates the DOM itself
+  (moving/removing the button) and would otherwise re-enter its own observer
+  on every call; a single React commit also emits many mutation records.
+- **Overlap with other plugins**: because the button is now an ordinary
+  in-flow flex sibling instead of a `position:fixed` element with computed
+  coordinates, it cannot overlap another plugin's button by construction —
+  this eliminates the JellyWatchParty overlap this plugin's own
+  `positionMuiButton()` used to explicitly work around (both plugins floated
+  buttons anchored the same way and could land on identical coordinates;
+  JellyWatchParty's PR #65 fixed the same issue the same way independently).
+- `Jellyfin.Plugin.PrivateLibraries.csproj` / `build.yaml`: bumped
+  `2.0.0.0` → `2.0.1.0` (also brought `build.yaml`'s stale `1.10.0.0` back in
+  sync with the csproj/manifest, which had drifted since the last manual
+  version bump).
+- Not verified against a live Jellyfin 12 server (no Docker/browser in this
+  environment); verified by `node --check` on the modified script and by
+  reading the structure of `jellyfin-web`'s `AppToolbar.tsx` as described in
+  the referenced JellyWatchParty PR.
+
 ## 2026-09-08 — Drop Jellyfin 10.11 (net9.0) support (v1.10.0.0)
 
 Removed the net9.0 target framework and everything that existed only to ship it
