@@ -74,7 +74,8 @@
             + 'background:transparent;border:0;border-radius:50%;cursor:pointer;color:inherit;'
             + '-webkit-tap-highlight-color:transparent;}'
             + '.pl-mui-btn-standalone:hover{background-color:rgba(127,127,127,.2);}'
-            + '.pl-mui-btn:focus-visible{outline:2px solid currentColor;outline-offset:2px;}';
+            + '.pl-mui-btn:focus-visible{outline:2px solid currentColor;outline-offset:2px;}'
+            + '.pl-mui-btn .material-icons{display:inline-block;width:24px;height:24px;font-size:24px;line-height:24px;text-align:center;}';
         var style = document.createElement('style');
         style.id = 'privateLibrariesStyles';
         style.textContent = css;
@@ -379,11 +380,7 @@
         btn.className = donor && donor.className
             ? donor.className + ' pl-mui-btn'
             : 'MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeLarge pl-mui-btn pl-mui-btn-standalone';
-        btn.innerHTML = '<svg class="MuiSvgIcon-root" xmlns="http://www.w3.org/2000/svg" '
-            + 'focusable="false" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor">'
-            + '<path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12'
-            + 'c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z"/>'
-            + '</svg>';
+        btn.innerHTML = '<span class="material-icons" aria-hidden="true">video_library</span>';
         btn.addEventListener('click', openDialog);
         return btn;
     }
