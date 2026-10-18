@@ -53,6 +53,7 @@ jobs:
           mkdir -p dist staging
 
           cp Jellyfin.Plugin.PrivateLibraries/bin/Release/net10.0/Jellyfin.Plugin.PrivateLibraries.dll staging/
+          cp logo.png staging/logo.png
           ZIP="private-libraries_${V}_jf12.zip"
           (cd staging && zip -r "../dist/$ZIP" .)
           echo "zip=$ZIP" >> "$GITHUB_OUTPUT"

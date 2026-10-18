@@ -2,6 +2,12 @@
 
 A running history of changes to JellyPrivateLibraries.
 
+## 2026-10-18 — Plugin image (v2.1.1.0)
+
+Added `logo.png` as the plugin image: `manifest.json` `imageUrl` points at the raw
+file on `main`, `build.yaml` gets an `image` field, and the release workflow also
+ships `logo.png` inside the zip. Version bumped 2.1.0.0 -> 2.1.1.0.
+
 ## 2026-09-09 — Fix Jellyfin 12 button: inject in-flow into the MUI toolbar instead of floating it (v2.0.1.0)
 
 Adapted the same fix TIGamingTV shipped for JellyWatchParty
