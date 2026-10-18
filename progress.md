@@ -2,6 +2,14 @@
 
 A running history of changes to JellyPrivateLibraries.
 
+## 2026-10-18 — Replace plugin image (v2.1.2.0)
+
+Replaced `logo.png` with the new 800x450 logo as `logo-800x450.png` (152 KB vs 1.8 MB).
+The filename changed on purpose: Jellyfin only downloads the catalog image when a file
+with that name is missing locally, so reusing `logo.png` would leave existing installs
+with the old image. `manifest.json`, `build.yaml` and the release workflow updated.
+Version bumped 2.1.1.0 -> 2.1.2.0.
+
 ## 2026-10-18 — Plugin image (v2.1.1.0)
 
 Added `logo.png` as the plugin image: `manifest.json` `imageUrl` points at the raw

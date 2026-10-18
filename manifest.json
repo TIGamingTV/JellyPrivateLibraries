@@ -6,7 +6,7 @@
         "overview": "Per-user media restriction via Jellyseerr requests and a home-screen widget.",
         "owner": "TIGamingTV",
         "category": "General",
-        "imageUrl": "https://raw.githubusercontent.com/TIGamingTV/JellyPrivateLibraries/main/logo.png",
+        "imageUrl": "https://raw.githubusercontent.com/TIGamingTV/JellyPrivateLibraries/main/logo-800x450.png",
         "versions": [
             {
                 "version": "2.1.1.0",
