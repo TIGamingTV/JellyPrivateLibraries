@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" alt="JellyPrivateLibraries" width="400">
+</p>
+
 # JellyPrivateLibraries
 
 A Jellyfin server plugin that **restricts which media each user sees** inside their libraries.
