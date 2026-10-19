@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" alt="JellyPrivateLibraries" width="400">
+  <img src="logo-800x450.png" alt="JellyPrivateLibraries" width="400">
 </p>
 
 # JellyPrivateLibraries
