@@ -3,9 +3,9 @@
   <PropertyGroup>
     <!--
       Jellyfin 12.0.x only (net10.0). Support for Jellyfin 10.11.x (net9.0) was
-      removed in v1.10.0.0 to drop the maintenance cost of dual-targeting; users
-      still on 10.11 can install an older release (<= v1.9.2.0) manually - see
-      README "Installing" and the GitHub Releases page.
+      removed in v2.0.0.0 to drop the maintenance cost of dual-targeting; users
+      still on 10.11 can install v1.9.3.0 (the zip without the _jf12 suffix)
+      manually - see docs/troubleshooting.md.
     -->
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Jellyfin.Plugin.PrivateLibraries</RootNamespace>
@@ -22,10 +22,10 @@
   </PropertyGroup>
 
   <!--
-    Jellyfin 12.0.x. Pinned to an exact release candidate rather than a floating
-    version on purpose: a stray "12.0.0-rcrc3" package exists on nuget.org that
-    sorts *above* rc7 under SemVer prerelease ordering, so a "12.0.*-*" float
-    would silently resolve to it. Bump this to "12.0.*" once 12.0.0 ships stable.
+    Jellyfin 12.0.x. Pinned to an exact version rather than a floating one on
+    purpose: a stray "12.0.0-rcrc3" package exists on nuget.org that sorts
+    *above* the real release candidates under SemVer prerelease ordering, so a
+    "12.0.*-*" float could silently resolve to it.
   -->
   <ItemGroup>
     <PackageReference Include="Jellyfin.Controller" Version="12.0.0">

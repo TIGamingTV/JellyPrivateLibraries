@@ -2,6 +2,31 @@
 
 A running history of changes to JellyPrivateLibraries.
 
+## 2026-10-22 — Documentation audit and restructure
+
+Documentation-only change set; no application behaviour changed.
+
+- `README.md` rewritten as a user-facing landing page: features, requirements,
+  copyable manifest URL, install + verify steps, quick start, settings overview, and
+  doc links. Fixed the broken logo reference (`logo.png` → `logo-800x450.png`).
+  Moved the component table, build instructions and release-workflow notes out of it.
+- New `docs/configuration.md` (settings reference, mandatory mode, Jellyseerr webhook
+  and history sync setup, webhook responses, requester matching, config file location),
+  `docs/usage.md` (widget, hidden media, Jellyseerr flow, scheduled tasks, limitations),
+  `docs/troubleshooting.md` (logs, injection messages, webhook log messages, manual
+  install, update, uninstall, 10.11), `docs/development.md` (build, layout, REST API,
+  releasing).
+- Corrected the Jellyfin 10.11 guidance everywhere: the last release with a net9.0
+  build is **v1.9.3.0** (`private-libraries_1.9.3.0.zip`, checked against the GitHub
+  release assets), not v1.9.2.0; and 10.11 support was dropped in the release tagged
+  **v2.0.0.0** — `v1.10.0.0` was the source version but was never tagged. Updated
+  `CLAUDE.md`, `build.yaml` and the `.csproj` comments accordingly (comments only).
+- Documented previously undocumented behaviour: the filter is not a security boundary
+  (users can turn it off and add any title, even in mandatory mode), mandatory mode only
+  applies on reconcile and is not reversed by turning it off, changing the tag prefix is
+  not migrated, and uninstalling leaves `jpl:` tags on user policies.
+- `CLAUDE.md`: added the Jellyseerr files to "Key files" and a "Documentation" section.
+
 ## 2026-10-18 — Replace plugin image (v2.1.2.0)
 
 Replaced `logo.png` with the new 800x450 logo as `logo-800x450.png` (152 KB vs 1.8 MB).
