@@ -9,7 +9,8 @@ each user to only the media they requested via Jellyseerr or added from a
 home-screen widget. It is built on Jellyfin's native per-user **allowed-tags
 whitelist** (`UserPolicy.AllowedTags`).
 
-Jellyfin 10.11.x (net9.0) support was **removed in v1.10.0.0** — see "Dropped
+Jellyfin 10.11.x (net9.0) support was **removed in v2.0.0.0** (the change set was
+versioned 1.10.0.0 in source, but that version was never tagged) — see "Dropped
 Jellyfin 10.11 support" below. Do not reintroduce dual-targeting without a strong
 reason; it doubled the SDK/CI/manifest/release surface for identical source.
 
@@ -56,9 +57,19 @@ reason; it doubled the SDK/CI/manifest/release surface for identical source.
   the callback payload type.
 - `Web/private-libraries.js` — injected widget (vanilla JS, no build step).
 - `ScheduledTasks/ReconcileTask.cs` — startup + 30-min interval reconcile.
+- `Services/JellyseerrClient.cs`, `Services/JellyseerrSyncService.cs`,
+  `ScheduledTasks/JellyseerrSyncTask.cs` — Jellyseerr API backfill sync (12-hour
+  interval, no startup trigger). Uses only `HttpClient` + `System.Text.Json` because
+  the release zip ships a single DLL.
 - `Configuration/PluginConfiguration.cs` — the source of truth (`Users`,
   `Grants`, `HiddenItems`, `TagPrefix`, `RestrictNewUsersByDefault`,
-  `SchemaVersion`) + config page (`configPage.html`).
+  `SchemaVersion`, and the `Jellyseerr*` settings) + config page (`configPage.html`).
+
+## Documentation
+
+User-facing docs: `README.md` (landing page, install) and `docs/` (`configuration.md`,
+`usage.md`, `troubleshooting.md`, `development.md`). When changing a setting, UI label,
+log message, endpoint or schedule, update the matching doc in the same change set.
 
 ## Supported server version
 
@@ -73,21 +84,23 @@ Single TFM, single Jellyfin line:
 - The reference is **pinned to an exact version on purpose**: a stray `12.0.0-rcrc3`
   package existed on nuget.org that sorted *above* the real prereleases under SemVer
   ordering, so a floating `12.0.*` selector risked silently resolving to it. Revisit
-  the pin as newer 12.0.x releases ship.
+  the pin as newer releases ship (`Jellyfin.Controller` 12.1.0 and 12.2.0 exist on
+  nuget.org; the plugin has not been retargeted or verified against them).
 - `build.yaml` is the descriptor for the artifact. Nothing in CI consumes it; it is
   metadata and must be kept in step with `manifest.json`.
 
 ### Dropped Jellyfin 10.11 support (net9.0)
 
-Removed in `v1.10.0.0`. The plugin previously multi-targeted `net9.0` (Jellyfin
+Removed in `v2.0.0.0` (source version `1.10.0.0`, never tagged). The plugin previously multi-targeted `net9.0` (Jellyfin
 10.11.x) and `net10.0` (Jellyfin 12.0.x) from **identical source** — there were never
 any `#if`/conditional-compilation differences, only a different `Jellyfin.Controller`
 `PackageReference` per TFM. Dual-targeting was dropped to stop doubling the SDK/CI/
-manifest/release surface for a build with no source differences. Versions up to
-`v1.9.2.0` still work on Jellyfin 10.11.x; those users can install one of those
-releases manually (see README "Installing") but will not get further updates through
-the plugin repository, since `manifest.json` now only carries `targetAbi 12.0.0.0`
-entries going forward.
+manifest/release surface for a build with no source differences. The last release
+with a 10.11 build is `v1.9.3.0` (asset `private-libraries_1.9.3.0.zip`, the zip
+*without* the `_jf12` suffix; verified net9.0). 10.11 users install it manually (see
+`docs/troubleshooting.md`, "Jellyfin 10.11 servers") and get no further updates
+through the plugin repository, since `manifest.json` only carries `targetAbi 12.0.0.0`
+entries.
 
 If 10.11 support is ever needed again: reintroduce `<TargetFrameworks>net9.0;net10.0
 </TargetFrameworks>`, a `Condition="'$(TargetFramework)' == 'net9.0'"` `ItemGroup`
